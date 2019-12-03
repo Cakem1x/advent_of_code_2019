@@ -3,16 +3,27 @@ use std::fs::read_to_string;
 fn main() {
     println!("loading initial state:");
     let input_string = read_to_string("input.txt").unwrap();
-    let mut input_state: Vec<u32> = input_string[..input_string.len() - 1] // get rid of \n character
+    let input_state: Vec<u32> = input_string[..input_string.len() - 1] // get rid of \n character
         .split(",")
         .map(|s| s.parse::<u32>().expect("failed to convert input to u32"))
         .collect();
     println!("{:?}", input_state);
-    input_state[1] = 12;
-    input_state[2] = 2;
-    println!("Altered state:\n{:?}", input_state);
-    run_program(&mut input_state);
-    println!("Final state:\n{:?}", input_state);
+    'outer: for noun in 0..100 {
+        for verb in 0..100 {
+            let mut altered_state = input_state.to_vec();
+            altered_state[1] = noun;
+            altered_state[2] = verb;
+            //println!("Altered state:\n{:?}", altered_state);
+            run_program(&mut altered_state);
+            //println!("Final state:\n{:?}", altered_state);
+            let result = altered_state[0];
+            println!("With noun {} and verb {}: result is {}.", noun, verb, result);
+            if result == 19690720 {
+                println!("Found a correct noun, verb combination! 100 * noun + verb = {}", 100 * noun + verb);
+                break 'outer;
+            }
+        }
+    }
 }
 
 fn run_program(state: &mut [u32]) {
@@ -33,7 +44,7 @@ fn step_program(instruction_pointer: usize, state: &mut [u32]) -> bool {
         let second_operand = state[second_operand_pointer];
         let result = first_operand + second_operand;
         state[result_pointer] = result;
-        println!("{} + {} = {}", first_operand, second_operand, result);
+        //println!("{} + {} = {}", first_operand, second_operand, result);
         return false;
     } else if state[instruction_pointer] == 2 {
         // multiplication
@@ -44,7 +55,7 @@ fn step_program(instruction_pointer: usize, state: &mut [u32]) -> bool {
         let second_operand = state[second_operand_pointer];
         let result = first_operand * second_operand;
         state[result_pointer] = result;
-        println!("{} * {} = {}", first_operand, second_operand, result);
+        //println!("{} * {} = {}", first_operand, second_operand, result);
         return false;
     }
     if state[instruction_pointer] == 99 {
