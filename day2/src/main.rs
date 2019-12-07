@@ -1,12 +1,8 @@
 use std::fs::read_to_string;
 
-fn main() {
+fn day2() {
     println!("loading initial state:");
-    let input_string = read_to_string("input.txt").unwrap();
-    let input_state: Vec<u32> = input_string[..input_string.len() - 1] // get rid of \n character
-        .split(",")
-        .map(|s| s.parse::<u32>().expect("failed to convert input to u32"))
-        .collect();
+    let input_state: Vec<u32> = string_to_program_state(&read_to_string("input_day2.txt").unwrap());
     println!("{:?}", input_state);
     'outer: for noun in 0..100 {
         for verb in 0..100 {
@@ -17,13 +13,30 @@ fn main() {
             run_program(&mut altered_state);
             //println!("Final state:\n{:?}", altered_state);
             let result = altered_state[0];
-            println!("With noun {} and verb {}: result is {}.", noun, verb, result);
+            println!(
+                "With noun {} and verb {}: result is {}.",
+                noun, verb, result
+            );
             if result == 19690720 {
-                println!("Found a correct noun, verb combination! 100 * noun + verb = {}", 100 * noun + verb);
+                println!(
+                    "Found a correct noun, verb combination! 100 * noun + verb = {}",
+                    100 * noun + verb
+                );
                 break 'outer;
             }
         }
     }
+}
+
+fn string_to_program_state(input_string: &str) -> Vec<u32> {
+    return input_string[..input_string.len() - 1] // get rid of \n character
+           .split(",")
+           .map(|s| s.parse::<u32>().expect("failed to convert input to u32"))
+           .collect();
+}
+
+fn main() {
+    day2()
 }
 
 fn run_program(state: &mut [u32]) {
