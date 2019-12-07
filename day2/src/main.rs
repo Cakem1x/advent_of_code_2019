@@ -2,7 +2,7 @@ use std::fs::read_to_string;
 
 fn day2() {
     println!("loading initial state:");
-    let input_state: Vec<u32> = string_to_program_state(&read_to_string("input_day2.txt").unwrap());
+    let input_state: Vec<i32> = string_to_program_state(&read_to_string("input_day2.txt").unwrap());
     println!("{:?}", input_state);
     'outer: for noun in 0..100 {
         for verb in 0..100 {
@@ -28,10 +28,10 @@ fn day2() {
     }
 }
 
-fn string_to_program_state(input_string: &str) -> Vec<u32> {
+fn string_to_program_state(input_string: &str) -> Vec<i32> {
     return input_string[..input_string.len() - 1] // get rid of \n character
            .split(",")
-           .map(|s| s.parse::<u32>().expect("failed to convert input to u32"))
+           .map(|s| s.parse::<i32>().expect("failed to convert input to i32"))
            .collect();
 }
 
@@ -39,19 +39,25 @@ fn main() {
     day2()
 }
 
-fn run_program(state: &mut [u32]) {
+fn run_program(state: &mut [i32]) {
     let mut instruction_pointer = 0;
+    let mut step_counter = 0;
     loop {
-        let terminate = step_program(instruction_pointer, state);
-        if terminate {
+        let (new_instr_ptr, output) = step_program(instruction_pointer, state);
+        if new_instr_ptr == instruction_pointer {
             break;
         }
-        instruction_pointer += 4;
+        if output.is_some() {
+            println!{"#{} &{}: {}", step_counter, instruction_pointer, output.unwrap()};
+        }
+        instruction_pointer = new_instr_ptr;
+        step_counter += 1;
     }
+    println!{"#{} &{}: Terminate.", step_counter, instruction_pointer};
 }
 
-/// Returns whether the program should terminate
-fn step_program(instruction_pointer: usize, state: &mut [u32]) -> bool {
+/// Returns a tuple: the new position of the instruction pointer and an option for some output the program may have generated
+fn step_program(instruction_pointer: usize, state: &mut [i32]) -> (usize, Option<i32>) {
     if state[instruction_pointer] == 1 {
         // addition
         let first_operand_pointer = state[instruction_pointer + 1] as usize;
@@ -62,7 +68,7 @@ fn step_program(instruction_pointer: usize, state: &mut [u32]) -> bool {
         let result = first_operand + second_operand;
         state[result_pointer] = result;
         //println!("{} + {} = {}", first_operand, second_operand, result);
-        return false;
+        return (instruction_pointer + 4, None);
     } else if state[instruction_pointer] == 2 {
         // multiplication
         let first_operand_pointer = state[instruction_pointer + 1] as usize;
@@ -73,11 +79,11 @@ fn step_program(instruction_pointer: usize, state: &mut [u32]) -> bool {
         let result = first_operand * second_operand;
         state[result_pointer] = result;
         //println!("{} * {} = {}", first_operand, second_operand, result);
-        return false;
+        return (instruction_pointer + 4, None);
     }
     if state[instruction_pointer] == 99 {
         // termination
-        return true;
+        return (instruction_pointer, None);
     }
     panic!("Invalid opcode found!");
 }
@@ -85,26 +91,26 @@ fn step_program(instruction_pointer: usize, state: &mut [u32]) -> bool {
 #[test]
 fn test_opcode1_add() {
     let mut program_state = [1, 9, 10, 3, 2, 3, 11, 0, 99, 30, 40, 50];
-    assert_eq!(step_program(0, &mut program_state), false);
+    assert_eq!(step_program(0, &mut program_state).0, 4);
     assert_eq!(program_state, [1, 9, 10, 70, 2, 3, 11, 0, 99, 30, 40, 50]);
     let mut program_state = [1, 0, 0, 0, 99];
-    assert_eq!(step_program(0, &mut program_state), false);
+    assert_eq!(step_program(0, &mut program_state).0, 4);
     assert_eq!(program_state, [2, 0, 0, 0, 99]);
 }
 
 #[test]
 fn test_opcode1_mul() {
     let mut program_state = [1, 9, 10, 70, 2, 3, 11, 0, 99, 30, 40, 50];
-    assert_eq!(step_program(4, &mut program_state), false);
+    assert_eq!(step_program(4, &mut program_state).0, 8);
     assert_eq!(
         program_state,
         [3500, 9, 10, 70, 2, 3, 11, 0, 99, 30, 40, 50]
     );
     let mut program_state = [2, 3, 0, 3, 99];
-    assert_eq!(step_program(0, &mut program_state), false);
+    assert_eq!(step_program(0, &mut program_state).0, 4);
     assert_eq!(program_state, [2, 3, 0, 6, 99]);
     let mut program_state = [2, 4, 4, 5, 99, 0];
-    assert_eq!(step_program(0, &mut program_state), false);
+    assert_eq!(step_program(0, &mut program_state).0, 4);
     assert_eq!(program_state, [2, 4, 4, 5, 99, 9801]);
 }
 
