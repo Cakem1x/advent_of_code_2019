@@ -30,9 +30,9 @@ fn day2() {
 
 fn string_to_program_state(input_string: &str) -> Vec<i32> {
     return input_string[..input_string.len() - 1] // get rid of \n character
-           .split(",")
-           .map(|s| s.parse::<i32>().expect("failed to convert input to i32"))
-           .collect();
+        .split(",")
+        .map(|s| s.parse::<i32>().expect("failed to convert input to i32"))
+        .collect();
 }
 
 fn main() {
@@ -48,12 +48,12 @@ fn run_program(state: &mut [i32]) {
             break;
         }
         if output.is_some() {
-            println!{"#{} &{}: {}", step_counter, instruction_pointer, output.unwrap()};
+            println! {"#{} &{}: {}", step_counter, instruction_pointer, output.unwrap()};
         }
         instruction_pointer = new_instr_ptr;
         step_counter += 1;
     }
-    println!{"#{} &{}: Terminate.", step_counter, instruction_pointer};
+    println! {"#{} &{}: Terminate.", step_counter, instruction_pointer};
 }
 
 /// Returns a tuple: the new position of the instruction pointer and an option for some output the program may have generated
@@ -89,7 +89,7 @@ fn step_program(instruction_pointer: usize, state: &mut [i32]) -> (usize, Option
 }
 
 #[test]
-fn test_opcode1_add() {
+fn test_opcode_add() {
     let mut program_state = [1, 9, 10, 3, 2, 3, 11, 0, 99, 30, 40, 50];
     assert_eq!(step_program(0, &mut program_state).0, 4);
     assert_eq!(program_state, [1, 9, 10, 70, 2, 3, 11, 0, 99, 30, 40, 50]);
@@ -99,7 +99,7 @@ fn test_opcode1_add() {
 }
 
 #[test]
-fn test_opcode1_mul() {
+fn test_opcode_mul() {
     let mut program_state = [1, 9, 10, 70, 2, 3, 11, 0, 99, 30, 40, 50];
     assert_eq!(step_program(4, &mut program_state).0, 8);
     assert_eq!(
@@ -123,7 +123,15 @@ fn test_run_program() {
 
 #[test]
 fn test_day2_works() {
-    let mut program_state = [1, 53, 79, 3, 1, 1, 2, 3, 1, 3, 4, 3, 1, 5, 0, 3, 2, 1, 6, 19, 1, 9, 19, 23, 1, 6, 23, 27, 1, 10, 27, 31, 1, 5, 31, 35, 2, 6, 35, 39, 1, 5, 39, 43, 1, 5, 43, 47, 2, 47, 6, 51, 1, 51, 5, 55, 1, 13, 55, 59, 2, 9, 59, 63, 1, 5, 63, 67, 2, 67, 9, 71, 1, 5, 71, 75, 2, 10, 75, 79, 1, 6, 79, 83, 1, 13, 83, 87, 1, 10, 87, 91, 1, 91, 5, 95, 2, 95, 10, 99, 2, 9, 99, 103, 1, 103, 6, 107, 1, 107, 10, 111, 2, 111, 10, 115, 1, 115, 6, 119, 2, 119, 9, 123, 1, 123, 6, 127, 2, 127, 10, 131, 1, 131, 6, 135, 2, 6, 135, 139, 1, 139, 5, 143, 1, 9, 143, 147, 1, 13, 147, 151, 1, 2, 151, 155, 1, 10, 155, 0, 99, 2, 14, 0, 0];
+    let mut program_state = [
+        1, 53, 79, 3, 1, 1, 2, 3, 1, 3, 4, 3, 1, 5, 0, 3, 2, 1, 6, 19, 1, 9, 19, 23, 1, 6, 23, 27,
+        1, 10, 27, 31, 1, 5, 31, 35, 2, 6, 35, 39, 1, 5, 39, 43, 1, 5, 43, 47, 2, 47, 6, 51, 1, 51,
+        5, 55, 1, 13, 55, 59, 2, 9, 59, 63, 1, 5, 63, 67, 2, 67, 9, 71, 1, 5, 71, 75, 2, 10, 75,
+        79, 1, 6, 79, 83, 1, 13, 83, 87, 1, 10, 87, 91, 1, 91, 5, 95, 2, 95, 10, 99, 2, 9, 99, 103,
+        1, 103, 6, 107, 1, 107, 10, 111, 2, 111, 10, 115, 1, 115, 6, 119, 2, 119, 9, 123, 1, 123,
+        6, 127, 2, 127, 10, 131, 1, 131, 6, 135, 2, 6, 135, 139, 1, 139, 5, 143, 1, 9, 143, 147, 1,
+        13, 147, 151, 1, 2, 151, 155, 1, 10, 155, 0, 99, 2, 14, 0, 0,
+    ];
     run_program(&mut program_state);
     assert_eq!(program_state[0], 19690720);
 }
