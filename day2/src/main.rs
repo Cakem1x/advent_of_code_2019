@@ -1,5 +1,7 @@
 use std::fs::read_to_string;
+use std::io;
 
+#[allow(dead_code)]
 fn day2() {
     println!("loading initial state:");
     let input_state: Vec<i32> = string_to_program_state(&read_to_string("input_day2.txt").unwrap());
@@ -36,7 +38,9 @@ fn string_to_program_state(input_string: &str) -> Vec<i32> {
 }
 
 fn main() {
-    day2()
+    //day2()
+    let mut program_state = [3, 0, 4, 0, 99];
+    run_program(&mut program_state);
 }
 
 fn run_program(state: &mut [i32]) {
@@ -56,40 +60,99 @@ fn run_program(state: &mut [i32]) {
     println! {"#{} &{}: Terminate.", step_counter, instruction_pointer};
 }
 
+#[derive(Debug, PartialEq)]
+enum Opcode {
+    Add,
+    Mul,
+    Input,
+    Output,
+    Terminate,
+}
+
+#[derive(Debug, PartialEq)]
+enum ParameterMode {
+    Position,
+    Immediate,
+}
+
+fn parse_instruction(opcode_int: i32) -> (Opcode, ParameterMode, ParameterMode, ParameterMode) {
+    let opcode = match opcode_int % 100 {
+        1 => Opcode::Add,
+        2 => Opcode::Mul,
+        3 => Opcode::Input,
+        4 => Opcode::Output,
+        99 => Opcode::Terminate,
+        x => panic!("Invalid opcode found: {}!", x),
+    };
+    let pm_first = match opcode_int / 100 % 10
+    {
+        0 => ParameterMode::Position,
+        1 => ParameterMode::Immediate,
+        x => panic!("Invalid parameter mode fuond: {}!", x),
+    };
+    let pm_second = match opcode_int / 1000 % 10
+    {
+        0 => ParameterMode::Position,
+        1 => ParameterMode::Immediate,
+        x => panic!("Invalid parameter mode fuond: {}!", x),
+    };
+    let pm_third = match opcode_int / 10000 % 10
+    {
+        0 => ParameterMode::Position,
+        1 => ParameterMode::Immediate,
+        x => panic!("Invalid parameter mode fuond: {}!", x),
+    };
+    return (opcode, pm_first, pm_second, pm_third);
+}
+
 /// Returns a tuple: the new position of the instruction pointer and an option for some output the program may have generated
 fn step_program(instruction_pointer: usize, state: &mut [i32]) -> (usize, Option<i32>) {
-    if state[instruction_pointer] == 1 {
-        // addition
-        let first_operand_pointer = state[instruction_pointer + 1] as usize;
-        let second_operand_pointer = state[instruction_pointer + 2] as usize;
-        let result_pointer = state[instruction_pointer + 3] as usize;
-        let first_operand = state[first_operand_pointer];
-        let second_operand = state[second_operand_pointer];
-        let result = first_operand + second_operand;
-        state[result_pointer] = result;
-        //println!("{} + {} = {}", first_operand, second_operand, result);
-        return (instruction_pointer + 4, None);
-    } else if state[instruction_pointer] == 2 {
-        // multiplication
-        let first_operand_pointer = state[instruction_pointer + 1] as usize;
-        let second_operand_pointer = state[instruction_pointer + 2] as usize;
-        let result_pointer = state[instruction_pointer + 3] as usize;
-        let first_operand = state[first_operand_pointer];
-        let second_operand = state[second_operand_pointer];
-        let result = first_operand * second_operand;
-        state[result_pointer] = result;
-        //println!("{} * {} = {}", first_operand, second_operand, result);
-        return (instruction_pointer + 4, None);
+    match parse_instruction(state[instruction_pointer]) {
+        (Opcode::Add, pm1, pm2, pm3) => {
+            let first_operand_pointer = state[instruction_pointer + 1] as usize;
+            let second_operand_pointer = state[instruction_pointer + 2] as usize;
+            let result_pointer = state[instruction_pointer + 3] as usize;
+            let first_operand = state[first_operand_pointer];
+            let second_operand = state[second_operand_pointer];
+            let result = first_operand + second_operand;
+            state[result_pointer] = result;
+            //println!("{} + {} = {}", first_operand, second_operand, result);
+            return (instruction_pointer + 4, None);
+        }
+        (Opcode::Mul, pm1, pm2, pm3) => {
+            let first_operand_pointer = state[instruction_pointer + 1] as usize;
+            let second_operand_pointer = state[instruction_pointer + 2] as usize;
+            let result_pointer = state[instruction_pointer + 3] as usize;
+            let first_operand = state[first_operand_pointer];
+            let second_operand = state[second_operand_pointer];
+            let result = first_operand * second_operand;
+            state[result_pointer] = result;
+            //println!("{} * {} = {}", first_operand, second_operand, result);
+            return (instruction_pointer + 4, None);
+        }
+        (Opcode::Input, pm1, pm2, pm3) => {
+            let first_operand_pointer = state[instruction_pointer + 1] as usize;
+            let mut input = String::new();
+            println!("awaiting input for &{}", first_operand_pointer);
+            io::stdin().read_line(&mut input).unwrap();
+            let input_value: i32 = input[..input.len() - 1]
+                .parse()
+                .expect("Couldn't convert input to i32");
+            state[first_operand_pointer] = input_value;
+            return (instruction_pointer + 2, None);
+        }
+        (Opcode::Output, pm1, pm2, pm3) => {
+            let first_operand_pointer = state[instruction_pointer + 1] as usize;
+            return (instruction_pointer + 2, Some(state[first_operand_pointer]));
+        }
+        (Opcode::Terminate, pm1, pm2, pm3) => {
+            return (instruction_pointer, None);
+        }
     }
-    if state[instruction_pointer] == 99 {
-        // termination
-        return (instruction_pointer, None);
-    }
-    panic!("Invalid opcode found!");
 }
 
 #[test]
-fn test_opcode_add() {
+fn opcode_add() {
     let mut program_state = [1, 9, 10, 3, 2, 3, 11, 0, 99, 30, 40, 50];
     assert_eq!(step_program(0, &mut program_state).0, 4);
     assert_eq!(program_state, [1, 9, 10, 70, 2, 3, 11, 0, 99, 30, 40, 50]);
@@ -99,7 +162,7 @@ fn test_opcode_add() {
 }
 
 #[test]
-fn test_opcode_mul() {
+fn opcode_mul() {
     let mut program_state = [1, 9, 10, 70, 2, 3, 11, 0, 99, 30, 40, 50];
     assert_eq!(step_program(4, &mut program_state).0, 8);
     assert_eq!(
@@ -115,14 +178,14 @@ fn test_opcode_mul() {
 }
 
 #[test]
-fn test_run_program() {
+fn mini_program() {
     let mut program_state = [1, 1, 1, 4, 99, 5, 6, 0, 99];
     run_program(&mut program_state);
     assert_eq!(program_state, [30, 1, 1, 4, 2, 5, 6, 0, 99]);
 }
 
 #[test]
-fn test_day2_works() {
+fn day2_works() {
     let mut program_state = [
         1, 53, 79, 3, 1, 1, 2, 3, 1, 3, 4, 3, 1, 5, 0, 3, 2, 1, 6, 19, 1, 9, 19, 23, 1, 6, 23, 27,
         1, 10, 27, 31, 1, 5, 31, 35, 2, 6, 35, 39, 1, 5, 39, 43, 1, 5, 43, 47, 2, 47, 6, 51, 1, 51,
@@ -134,4 +197,12 @@ fn test_day2_works() {
     ];
     run_program(&mut program_state);
     assert_eq!(program_state[0], 19690720);
+}
+
+#[test]
+fn parse_instruction_omit_zero() {
+    assert_eq!(parse_instruction(1002).0, Opcode::Mul);
+    assert_eq!(parse_instruction(1002).1, ParameterMode::Position);
+    assert_eq!(parse_instruction(1002).2, ParameterMode::Immediate);
+    assert_eq!(parse_instruction(1002).3, ParameterMode::Position);
 }
