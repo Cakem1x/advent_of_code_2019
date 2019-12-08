@@ -30,6 +30,14 @@ fn day2() {
     }
 }
 
+#[allow(dead_code)]
+fn day5() {
+    println!("loading initial state:");
+    let mut input_state: Vec<i32> = string_to_program_state(&read_to_string("input_day5.txt").unwrap());
+    println!("{:?}", input_state);
+    run_program(&mut input_state);
+}
+
 fn string_to_program_state(input_string: &str) -> Vec<i32> {
     return input_string[..input_string.len() - 1] // get rid of \n character
         .split(",")
@@ -39,8 +47,7 @@ fn string_to_program_state(input_string: &str) -> Vec<i32> {
 
 fn main() {
     //day2()
-    let mut program_state = [3, 0, 4, 0, 99];
-    run_program(&mut program_state);
+    day5();
 }
 
 fn run_program(state: &mut [i32]) {
@@ -109,46 +116,86 @@ fn parse_instruction(opcode_int: i32) -> (Opcode, ParameterMode, ParameterMode, 
 fn step_program(instruction_pointer: usize, state: &mut [i32]) -> (usize, Option<i32>) {
     match parse_instruction(state[instruction_pointer]) {
         (Opcode::Add, pm1, pm2, pm3) => {
-            let first_operand_pointer = state[instruction_pointer + 1] as usize;
-            let second_operand_pointer = state[instruction_pointer + 2] as usize;
-            let result_pointer = state[instruction_pointer + 3] as usize;
-            let first_operand = state[first_operand_pointer];
-            let second_operand = state[second_operand_pointer];
-            let result = first_operand + second_operand;
-            state[result_pointer] = result;
-            //println!("{} + {} = {}", first_operand, second_operand, result);
+            let first_operand_param = state[instruction_pointer + 1];
+            let second_operand_param = state[instruction_pointer + 2];
+            let result_param = state[instruction_pointer + 3];
+            let first_operand_value = match pm1 {
+                ParameterMode::Position => state[first_operand_param as usize],
+                ParameterMode::Immediate => first_operand_param,
+            };
+            let second_operand_value = match pm2 {
+                ParameterMode::Position => state[second_operand_param as usize],
+                ParameterMode::Immediate => second_operand_param,
+            };
+            let result_value = first_operand_value + second_operand_value;
+            //println!("{} + {} = {}", first_operand_value, second_operand_value, result_value);
+            let result_pointer = match pm3 {
+                ParameterMode::Position => result_param as usize,
+                _ => panic!("at &{} -> {}: result parameter only supports position mode.", instruction_pointer, state[instruction_pointer]),
+            };
+            state[result_pointer] = result_value;
             return (instruction_pointer + 4, None);
         }
         (Opcode::Mul, pm1, pm2, pm3) => {
-            let first_operand_pointer = state[instruction_pointer + 1] as usize;
-            let second_operand_pointer = state[instruction_pointer + 2] as usize;
-            let result_pointer = state[instruction_pointer + 3] as usize;
-            let first_operand = state[first_operand_pointer];
-            let second_operand = state[second_operand_pointer];
-            let result = first_operand * second_operand;
-            state[result_pointer] = result;
-            //println!("{} * {} = {}", first_operand, second_operand, result);
+            let first_operand_param = state[instruction_pointer + 1];
+            let second_operand_param = state[instruction_pointer + 2];
+            let result_param = state[instruction_pointer + 3];
+            let first_operand_value = match pm1 {
+                ParameterMode::Position => state[first_operand_param as usize],
+                ParameterMode::Immediate => first_operand_param,
+            };
+            let second_operand_value = match pm2 {
+                ParameterMode::Position => state[second_operand_param as usize],
+                ParameterMode::Immediate => second_operand_param,
+            };
+            let result_value = first_operand_value * second_operand_value;
+            //println!("{} * {} = {}", first_operand_value, second_operand_value, result_value);
+            let result_pointer = match pm3 {
+                ParameterMode::Position => result_param as usize,
+                _ => panic!("at &{} -> {}: result parameter only supports position mode.", instruction_pointer, state[instruction_pointer]),
+            };
+            state[result_pointer] = result_value;
             return (instruction_pointer + 4, None);
         }
-        (Opcode::Input, pm1, pm2, pm3) => {
-            let first_operand_pointer = state[instruction_pointer + 1] as usize;
+        (Opcode::Input, pm1, _pm2, _pm3) => {
+            let target_param = state[instruction_pointer + 1];
+            let target_pointer = match pm1 {
+                ParameterMode::Position => target_param as usize,
+                _ => panic!("at &{} -> {}: target parameter only supports position mode.", instruction_pointer, state[instruction_pointer]),
+            };
             let mut input = String::new();
-            println!("awaiting input for &{}", first_operand_pointer);
+            println!("awaiting input for &{}", target_pointer);
             io::stdin().read_line(&mut input).unwrap();
             let input_value: i32 = input[..input.len() - 1]
                 .parse()
                 .expect("Couldn't convert input to i32");
-            state[first_operand_pointer] = input_value;
+            state[target_pointer] = input_value;
             return (instruction_pointer + 2, None);
         }
-        (Opcode::Output, pm1, pm2, pm3) => {
-            let first_operand_pointer = state[instruction_pointer + 1] as usize;
-            return (instruction_pointer + 2, Some(state[first_operand_pointer]));
+        (Opcode::Output, pm1, _pm2, _pm3) => {
+            let output_param = state[instruction_pointer + 1];
+            let output_value = match pm1 {
+                ParameterMode::Position => state[output_param as usize],
+                ParameterMode::Immediate => output_param,
+            };
+            return (instruction_pointer + 2, Some(output_value));
         }
-        (Opcode::Terminate, pm1, pm2, pm3) => {
+        (Opcode::Terminate, _pm1, _pm2, _pm3) => {
             return (instruction_pointer, None);
         }
     }
+}
+
+#[test]
+fn program_with_negative_immediate_values() {
+    let mut program_state = [1101,100,-1,4,0];
+    let instruction = parse_instruction(program_state[0]);
+    assert_eq!(instruction.0, Opcode::Add);
+    assert_eq!(instruction.1, ParameterMode::Immediate);
+    assert_eq!(instruction.2, ParameterMode::Immediate);
+    assert_eq!(instruction.3, ParameterMode::Position);
+    run_program(&mut program_state);
+    assert_eq!(program_state, [1101,100,-1,4,99]);
 }
 
 #[test]
@@ -159,6 +206,12 @@ fn opcode_add() {
     let mut program_state = [1, 0, 0, 0, 99];
     assert_eq!(step_program(0, &mut program_state).0, 4);
     assert_eq!(program_state, [2, 0, 0, 0, 99]);
+}
+
+#[test]
+fn opcode_output_supports_immediate_mode() {
+    let mut program_state = [104, 0, 99];
+    run_program(&mut program_state); // should output 0, but testing that seems too complicated
 }
 
 #[test]
@@ -197,6 +250,45 @@ fn day2_works() {
     ];
     run_program(&mut program_state);
     assert_eq!(program_state[0], 19690720);
+}
+
+#[test]
+#[should_panic]
+fn parse_instruction_panics() {
+    let instruction = 28;
+    parse_instruction(instruction);
+}
+
+#[test]
+fn parse_instruction_add() {
+    let instruction = 1;
+    assert_eq!(parse_instruction(instruction).0, Opcode::Add);
+    assert_eq!(parse_instruction(instruction).1, ParameterMode::Position);
+    assert_eq!(parse_instruction(instruction).2, ParameterMode::Position);
+    assert_eq!(parse_instruction(instruction).3, ParameterMode::Position);
+}
+
+#[test]
+fn parse_instruction_mul() {
+    let instruction = 2;
+    assert_eq!(parse_instruction(instruction).0, Opcode::Mul);
+    assert_eq!(parse_instruction(instruction).1, ParameterMode::Position);
+    assert_eq!(parse_instruction(instruction).2, ParameterMode::Position);
+    assert_eq!(parse_instruction(instruction).3, ParameterMode::Position);
+}
+
+#[test]
+fn parse_instruction_input() {
+    let instruction = 3;
+    assert_eq!(parse_instruction(instruction).0, Opcode::Input);
+    assert_eq!(parse_instruction(instruction).1, ParameterMode::Position);
+}
+
+#[test]
+fn parse_instruction_output() {
+    let instruction = 4;
+    assert_eq!(parse_instruction(instruction).0, Opcode::Output);
+    assert_eq!(parse_instruction(instruction).1, ParameterMode::Position);
 }
 
 #[test]
