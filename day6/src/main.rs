@@ -6,13 +6,35 @@ fn main() {
     let input_string = read_to_string("input.txt").unwrap();
     let relations = string_to_relations(&input_string[..input_string.len()-1]);
     let graph = generate_graph_from_relations(relations);
-    println!("Total number of orbits: {}", count_orbits(&graph));
+
+    let you_orbit_object_to_com = path_to_com(&graph, graph.get("YOU").unwrap());
+    let santa_orbit_object_to_com = path_to_com(&graph, graph.get("SAN").unwrap());
+    println!("Path YOU to COM: {:?}", you_orbit_object_to_com);
+    println!("Path SAN to COM: {:?}", santa_orbit_object_to_com);
+
+    let mut closest_common_object = "COM";
+    let mut dist_along_you_orbit = you_orbit_object_to_com.len() - 1;
+    for (n, object_name) in you_orbit_object_to_com.iter().enumerate() {
+        if santa_orbit_object_to_com.contains(object_name) {
+            println!("Found common object: {}. Nr transfers necessary to reach it: {}", object_name, n);
+            closest_common_object = object_name;
+            dist_along_you_orbit = n;
+            break;
+        }
+    }
+    let mut dist_along_santa_orbit = 0;
+    for object_name in santa_orbit_object_to_com.iter() {
+        if object_name == &closest_common_object {
+            break;
+        }
+        dist_along_santa_orbit += 1;
+    }
+    println!("distance along you path: {}\ndistance along santa path: {}\nnumber of transfers needed: {}", dist_along_you_orbit, dist_along_santa_orbit, dist_along_you_orbit+dist_along_santa_orbit);
 }
 
 fn string_to_relations(relations_string: &str) -> Vec<(&str, &str)> {
     let mut relations = Vec::new();
     for relation_string in relations_string.split('\n') {
-        println!("Got relation_string {:?}", relation_string);
         let relation: Vec<&str> = relation_string.split(')').collect();
         assert_eq!(relation.len(), 2);
         relations.push((relation[0], relation[1]));
@@ -32,14 +54,15 @@ fn generate_graph_from_relations(relations: Vec<(&str, &str)>) -> Graph {
 }
 
 fn count_orbits_of_object(graph: &Graph, object_name: &str) -> usize {
-    let mut orbit_count = 0;
-    let mut result = graph.get(object_name);
-    while result.is_some() {
-        let object_name = result.unwrap();
-        result = graph.get(object_name);
-        orbit_count += 1;
-    }
-    return orbit_count;
+    //let mut orbit_count = 0;
+    //let mut result = graph.get(object_name);
+    //while result.is_some() {
+    //    let object_name = result.unwrap();
+    //    result = graph.get(object_name);
+    //    orbit_count += 1;
+    //}
+    //return orbit_count;
+    return path_to_com(&graph, object_name).len() - 1;
 }
 
 fn count_orbits(graph: &Graph) -> usize {
@@ -50,6 +73,17 @@ fn count_orbits(graph: &Graph) -> usize {
         orbit_count += n;
     }
     return orbit_count;
+}
+
+fn path_to_com<'a>(graph: &'a Graph, object_name: &'a str) -> Vec<&'a str> {
+    let mut path = [object_name].to_vec();
+    let mut result = graph.get(object_name);
+    while result.is_some() {
+        let object_name = result.unwrap();
+        path.push(object_name);
+        result = graph.get(object_name);
+    }
+    return path;
 }
 
 #[test]
