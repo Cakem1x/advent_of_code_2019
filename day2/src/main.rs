@@ -1,5 +1,6 @@
 use std::fs::read_to_string;
 use std::io;
+use permutohedron::Heap;
 
 #[allow(dead_code)]
 fn day2() {
@@ -33,7 +34,8 @@ fn day2() {
 #[allow(dead_code)]
 fn day5() {
     println!("loading initial state:");
-    let mut input_state: Vec<i32> = string_to_program_state(&read_to_string("input_day5.txt").unwrap());
+    let mut input_state: Vec<i32> =
+        string_to_program_state(&read_to_string("input_day5.txt").unwrap());
     let mut input = String::new();
     io::stdin().read_line(&mut input).unwrap();
     let input_value: i32 = input[..input.len() - 1]
@@ -46,9 +48,18 @@ fn day5() {
 #[allow(dead_code)]
 fn day7() {
     println!("loading initial state:");
-    let mut input_state: Vec<i32> = string_to_program_state(&read_to_string("input_day7.txt").unwrap());
+    let input_state: Vec<i32> = string_to_program_state(&read_to_string("input_day7.txt").unwrap());
     println!("{:?}", input_state);
-    run_program(&mut input_state, Vec::new());
+    let mut max_thruster_value = 0;
+    let mut phase_settings = [0,1,2,3,4];
+    for phase_settings_permutation in Heap::new(&mut phase_settings).by_ref() {
+        let thruster_value = amplification_circuit(&input_state, phase_settings_permutation);
+        if thruster_value > max_thruster_value {
+            max_thruster_value = thruster_value;
+            println!("Found new max_thruster_value: {}, with sequence {:?}", max_thruster_value, phase_settings_permutation);
+        }
+    }
+    println!{"max thruster value: {}", max_thruster_value};
 }
 
 fn string_to_program_state(input_string: &str) -> Vec<i32> {
@@ -64,24 +75,43 @@ fn main() {
     day7();
 }
 
+/// For a given program and a set of phase settings, calculate the resulting thruster value
+fn amplification_circuit(program_state: &[i32], phase_settings: [i32; 5]) -> i32 {
+    let mut previous_output = 0;
+    for (_amplifier_id, phase) in phase_settings.iter().enumerate() {
+        let input = [previous_output, phase.to_owned()];
+        previous_output = run_program(&mut program_state.to_vec(), input.to_vec())[0];
+        //println!(
+        //    "Amplifier {}: phase setting {} | {} -> {}",
+        //    _amplifier_id, input[1], input[0], previous_output
+        //);
+    }
+    return previous_output;
+}
+
 fn run_program(state: &mut [i32], mut input_values: Vec<i32>) -> Vec<i32> {
     let mut instruction_pointer = 0;
-    let mut step_counter = 0;
+    let mut _step_counter = 0;
     let mut program_output = Vec::new();
+    //println!("Starting new program with input {:?}", input_values);
     loop {
-        let (new_instr_ptr, output) = step_program(instruction_pointer, state, input_values.pop());
+        let input_value = match parse_instruction(state[instruction_pointer]).0 {
+            Opcode::Input => input_values.pop(),
+            _ => None,
+        };
+        let (new_instr_ptr, output) = step_program(instruction_pointer, state, input_value);
         if new_instr_ptr == instruction_pointer {
             break;
         }
         if output.is_some() {
-            println! {"#{} &{}: {}", step_counter, instruction_pointer, output.unwrap()};
+            //println! {"#{} &{}: {}", _step_counter, instruction_pointer, output.unwrap()};
             program_output.push(output.unwrap());
         }
         instruction_pointer = new_instr_ptr;
-        step_counter += 1;
+        _step_counter += 1;
     }
-    println! {"#{} &{}: Terminate.", step_counter, instruction_pointer};
-    println! {"Program output: {:?}", program_output};
+    //println! {"#{} &{}: Terminate.", step_counter, instruction_pointer};
+    //println! {"Program output: {:?}", program_output};
     return program_output;
 }
 
@@ -117,20 +147,17 @@ fn parse_instruction(opcode_int: i32) -> (Opcode, ParameterMode, ParameterMode, 
         99 => Opcode::Terminate,
         x => panic!("Invalid opcode found: {}!", x),
     };
-    let pm_first = match opcode_int / 100 % 10
-    {
+    let pm_first = match opcode_int / 100 % 10 {
         0 => ParameterMode::Position,
         1 => ParameterMode::Immediate,
         x => panic!("Invalid parameter mode fuond: {}!", x),
     };
-    let pm_second = match opcode_int / 1000 % 10
-    {
+    let pm_second = match opcode_int / 1000 % 10 {
         0 => ParameterMode::Position,
         1 => ParameterMode::Immediate,
         x => panic!("Invalid parameter mode fuond: {}!", x),
     };
-    let pm_third = match opcode_int / 10000 % 10
-    {
+    let pm_third = match opcode_int / 10000 % 10 {
         0 => ParameterMode::Position,
         1 => ParameterMode::Immediate,
         x => panic!("Invalid parameter mode fuond: {}!", x),
@@ -139,7 +166,11 @@ fn parse_instruction(opcode_int: i32) -> (Opcode, ParameterMode, ParameterMode, 
 }
 
 /// Returns a tuple: the new position of the instruction pointer and an option for some output the program may have generated
-fn step_program(instruction_pointer: usize, state: &mut [i32], next_input_value: Option<i32>) -> (usize, Option<i32>) {
+fn step_program(
+    instruction_pointer: usize,
+    state: &mut [i32],
+    next_input_value: Option<i32>,
+) -> (usize, Option<i32>) {
     match parse_instruction(state[instruction_pointer]) {
         (Opcode::Add, pm1, pm2, pm3) => {
             let first_operand_param = state[instruction_pointer + 1];
@@ -157,7 +188,10 @@ fn step_program(instruction_pointer: usize, state: &mut [i32], next_input_value:
             //println!("{} + {} = {}", first_operand_value, second_operand_value, result_value);
             let result_pointer = match pm3 {
                 ParameterMode::Position => result_param as usize,
-                _ => panic!("at &{} -> {}: result parameter only supports position mode.", instruction_pointer, state[instruction_pointer]),
+                _ => panic!(
+                    "at &{} -> {}: result parameter only supports position mode.",
+                    instruction_pointer, state[instruction_pointer]
+                ),
             };
             state[result_pointer] = result_value;
             return (instruction_pointer + 4, None);
@@ -178,22 +212,28 @@ fn step_program(instruction_pointer: usize, state: &mut [i32], next_input_value:
             //println!("{} * {} = {}", first_operand_value, second_operand_value, result_value);
             let result_pointer = match pm3 {
                 ParameterMode::Position => result_param as usize,
-                _ => panic!("at &{} -> {}: result parameter only supports position mode.", instruction_pointer, state[instruction_pointer]),
+                _ => panic!(
+                    "at &{} -> {}: result parameter only supports position mode.",
+                    instruction_pointer, state[instruction_pointer]
+                ),
             };
             state[result_pointer] = result_value;
             return (instruction_pointer + 4, None);
         }
         (Opcode::Input, pm1, _pm2, _pm3) => {
             if next_input_value.is_some() {
+                //println!("#{}: got value {} during input instruction", instruction_pointer, next_input_value.unwrap());
                 let target_param = state[instruction_pointer + 1];
                 let target_pointer = match pm1 {
                     ParameterMode::Position => target_param as usize,
-                    _ => panic!("at &{} -> {}: target parameter only supports position mode.", instruction_pointer, state[instruction_pointer]),
+                    _ => panic!(
+                        "at &{} -> {}: target parameter only supports position mode.",
+                        instruction_pointer, state[instruction_pointer]
+                    ),
                 };
                 state[target_pointer] = next_input_value.unwrap();
                 return (instruction_pointer + 2, None);
-            }
-            else {
+            } else {
                 panic!("Encountered input instruction without having any next given input.");
             }
         }
@@ -253,7 +293,10 @@ fn step_program(instruction_pointer: usize, state: &mut [i32], next_input_value:
             let result_param = state[instruction_pointer + 3];
             let result_ptr = match pm3 {
                 ParameterMode::Position => result_param as usize,
-                _ => panic!("at &{} -> {}: result parameter only supports position mode.", instruction_pointer, state[instruction_pointer]),
+                _ => panic!(
+                    "at &{} -> {}: result parameter only supports position mode.",
+                    instruction_pointer, state[instruction_pointer]
+                ),
             };
             if first_operand_value < second_operand_value {
                 state[result_ptr] = 1;
@@ -276,7 +319,10 @@ fn step_program(instruction_pointer: usize, state: &mut [i32], next_input_value:
             let result_param = state[instruction_pointer + 3];
             let result_ptr = match pm3 {
                 ParameterMode::Position => result_param as usize,
-                _ => panic!("at &{} -> {}: result parameter only supports position mode.", instruction_pointer, state[instruction_pointer]),
+                _ => panic!(
+                    "at &{} -> {}: result parameter only supports position mode.",
+                    instruction_pointer, state[instruction_pointer]
+                ),
             };
             if first_operand_value == second_operand_value {
                 state[result_ptr] = 1;
@@ -287,20 +333,19 @@ fn step_program(instruction_pointer: usize, state: &mut [i32], next_input_value:
         }
         (Opcode::Terminate, _pm1, _pm2, _pm3) => {
             return (instruction_pointer, None);
-        }
-        //instruction => panic!("opcode {:?} not supported!", instruction.0),
+        } //instruction => panic!("opcode {:?} not supported!", instruction.0),
     }
 }
 
 #[test]
 fn program_with_less_than_in_immediate_mode() {
     for input in 0..8 {
-        let mut program_state = [1107,input,8,1,4,1,99];
+        let mut program_state = [1107, input, 8, 1, 4, 1, 99];
         run_program(&mut program_state, Vec::new());
         assert_eq!(program_state[1], 1);
     }
     for input in 8..12 {
-        let mut program_state = [1107,input,8,1,4,1,99];
+        let mut program_state = [1107, input, 8, 1, 4, 1, 99];
         run_program(&mut program_state, Vec::new());
         assert_eq!(program_state[1], 0);
     }
@@ -309,16 +354,16 @@ fn program_with_less_than_in_immediate_mode() {
 #[test]
 fn program_with_equals_in_immediate_mode() {
     for input in 0..8 {
-        let mut program_state = [1108,input,8,1,4,1,99];
+        let mut program_state = [1108, input, 8, 1, 4, 1, 99];
         run_program(&mut program_state, Vec::new());
         assert_eq!(program_state[1], 0);
     }
     let input = 8;
-    let mut program_state = [1108,input,8,1,4,1,99];
+    let mut program_state = [1108, input, 8, 1, 4, 1, 99];
     run_program(&mut program_state, Vec::new());
     assert_eq!(program_state[1], 1);
     for input in 9..12 {
-        let mut program_state = [1108,input,8,1,4,1,99];
+        let mut program_state = [1108, input, 8, 1, 4, 1, 99];
         run_program(&mut program_state, Vec::new());
         assert_eq!(program_state[1], 0);
     }
@@ -327,12 +372,12 @@ fn program_with_equals_in_immediate_mode() {
 #[test]
 fn program_with_less_than_in_position_mode() {
     for input in 0..8 {
-        let mut program_state = [7,7,8,7,4,7,99,input,8];
+        let mut program_state = [7, 7, 8, 7, 4, 7, 99, input, 8];
         run_program(&mut program_state, Vec::new());
         assert_eq!(program_state[7], 1);
     }
     for input in 8..12 {
-        let mut program_state = [7,7,8,7,4,7,99,input,8];
+        let mut program_state = [7, 7, 8, 7, 4, 7, 99, input, 8];
         run_program(&mut program_state, Vec::new());
         assert_eq!(program_state[7], 0);
     }
@@ -341,16 +386,16 @@ fn program_with_less_than_in_position_mode() {
 #[test]
 fn program_with_equals_in_position_mode() {
     for input in 0..8 {
-        let mut program_state = [8,7,8,7,4,7,99,input,8];
+        let mut program_state = [8, 7, 8, 7, 4, 7, 99, input, 8];
         run_program(&mut program_state, Vec::new());
         assert_eq!(program_state[7], 0);
     }
     let input = 8;
-    let mut program_state = [8,7,8,7,4,7,99,input,8];
+    let mut program_state = [8, 7, 8, 7, 4, 7, 99, input, 8];
     run_program(&mut program_state, Vec::new());
     assert_eq!(program_state[7], 1);
     for input in 9..12 {
-        let mut program_state = [8,7,8,7,4,7,99,input,8];
+        let mut program_state = [8, 7, 8, 7, 4, 7, 99, input, 8];
         run_program(&mut program_state, Vec::new());
         assert_eq!(program_state[7], 0);
     }
@@ -359,25 +404,25 @@ fn program_with_equals_in_position_mode() {
 #[test]
 fn program_with_jump_in_position_mode() {
     let input = 0;
-    let mut program_state = [6,10,13,1,11,12,11,4,11,99,input,0,1,9];
+    let mut program_state = [6, 10, 13, 1, 11, 12, 11, 4, 11, 99, input, 0, 1, 9];
     run_program(&mut program_state, Vec::new());
     assert_eq!(program_state[11], 0);
     let input = 3;
-    let mut program_state = [6,10,13,1,11,12,11,4,11,99,input,0,1,9];
+    let mut program_state = [6, 10, 13, 1, 11, 12, 11, 4, 11, 99, input, 0, 1, 9];
     run_program(&mut program_state, Vec::new());
     assert_eq!(program_state[11], 1);
 }
 
 #[test]
 fn program_with_negative_immediate_values() {
-    let mut program_state = [1101,100,-1,4,0];
+    let mut program_state = [1101, 100, -1, 4, 0];
     let instruction = parse_instruction(program_state[0]);
     assert_eq!(instruction.0, Opcode::Add);
     assert_eq!(instruction.1, ParameterMode::Immediate);
     assert_eq!(instruction.2, ParameterMode::Immediate);
     assert_eq!(instruction.3, ParameterMode::Position);
     run_program(&mut program_state, Vec::new());
-    assert_eq!(program_state, [1101,100,-1,4,99]);
+    assert_eq!(program_state, [1101, 100, -1, 4, 99]);
 }
 
 #[test]
@@ -510,4 +555,28 @@ fn parse_instruction_omit_zero() {
     assert_eq!(parse_instruction(1002).1, ParameterMode::Position);
     assert_eq!(parse_instruction(1002).2, ParameterMode::Immediate);
     assert_eq!(parse_instruction(1002).3, ParameterMode::Position);
+}
+
+#[test]
+fn get_thruster_signal() {
+    let program_state = [
+        3, 15, 3, 16, 1002, 16, 10, 16, 1, 16, 15, 15, 4, 15, 99, 0, 0,
+    ];
+    let sequence = [4, 3, 2, 1, 0];
+    let thruster_value = amplification_circuit(&program_state, sequence);
+    assert_eq!(thruster_value, 43210);
+    let program_state = [
+        3, 23, 3, 24, 1002, 24, 10, 24, 1002, 23, -1, 23, 101, 5, 23, 23, 1, 24, 23, 23, 4, 23, 99,
+        0, 0,
+    ];
+    let sequence = [0, 1, 2, 3, 4];
+    let thruster_value = amplification_circuit(&program_state, sequence);
+    assert_eq!(thruster_value, 54321);
+    let program_state = [
+        3, 31, 3, 32, 1002, 32, 10, 32, 1001, 31, -2, 31, 1007, 31, 0, 33, 1002, 33, 7, 33, 1, 33,
+        31, 31, 1, 32, 31, 31, 4, 31, 99, 0, 0, 0,
+    ];
+    let sequence = [1, 0, 4, 3, 2];
+    let thruster_value = amplification_circuit(&program_state, sequence);
+    assert_eq!(thruster_value, 65210);
 }
