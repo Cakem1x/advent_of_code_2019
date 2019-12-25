@@ -12,7 +12,7 @@ fn day2() {
             altered_state[1] = noun;
             altered_state[2] = verb;
             //println!("Altered state:\n{:?}", altered_state);
-            run_program(&mut altered_state);
+            run_program(&mut altered_state, Vec::new());
             //println!("Final state:\n{:?}", altered_state);
             let result = altered_state[0];
             println!(
@@ -34,8 +34,21 @@ fn day2() {
 fn day5() {
     println!("loading initial state:");
     let mut input_state: Vec<i32> = string_to_program_state(&read_to_string("input_day5.txt").unwrap());
+    let mut input = String::new();
+    io::stdin().read_line(&mut input).unwrap();
+    let input_value: i32 = input[..input.len() - 1]
+        .parse()
+        .expect("Couldn't convert input to i32");
     println!("{:?}", input_state);
-    run_program(&mut input_state);
+    run_program(&mut input_state, [input_value].to_vec());
+}
+
+#[allow(dead_code)]
+fn day7() {
+    println!("loading initial state:");
+    let mut input_state: Vec<i32> = string_to_program_state(&read_to_string("input_day7.txt").unwrap());
+    println!("{:?}", input_state);
+    run_program(&mut input_state, Vec::new());
 }
 
 fn string_to_program_state(input_string: &str) -> Vec<i32> {
@@ -46,25 +59,30 @@ fn string_to_program_state(input_string: &str) -> Vec<i32> {
 }
 
 fn main() {
-    //day2()
-    day5();
+    //day2();
+    //day5();
+    day7();
 }
 
-fn run_program(state: &mut [i32]) {
+fn run_program(state: &mut [i32], mut input_values: Vec<i32>) -> Vec<i32> {
     let mut instruction_pointer = 0;
     let mut step_counter = 0;
+    let mut program_output = Vec::new();
     loop {
-        let (new_instr_ptr, output) = step_program(instruction_pointer, state);
+        let (new_instr_ptr, output) = step_program(instruction_pointer, state, input_values.pop());
         if new_instr_ptr == instruction_pointer {
             break;
         }
         if output.is_some() {
             println! {"#{} &{}: {}", step_counter, instruction_pointer, output.unwrap()};
+            program_output.push(output.unwrap());
         }
         instruction_pointer = new_instr_ptr;
         step_counter += 1;
     }
     println! {"#{} &{}: Terminate.", step_counter, instruction_pointer};
+    println! {"Program output: {:?}", program_output};
+    return program_output;
 }
 
 #[derive(Debug, PartialEq)]
@@ -121,7 +139,7 @@ fn parse_instruction(opcode_int: i32) -> (Opcode, ParameterMode, ParameterMode, 
 }
 
 /// Returns a tuple: the new position of the instruction pointer and an option for some output the program may have generated
-fn step_program(instruction_pointer: usize, state: &mut [i32]) -> (usize, Option<i32>) {
+fn step_program(instruction_pointer: usize, state: &mut [i32], next_input_value: Option<i32>) -> (usize, Option<i32>) {
     match parse_instruction(state[instruction_pointer]) {
         (Opcode::Add, pm1, pm2, pm3) => {
             let first_operand_param = state[instruction_pointer + 1];
@@ -166,19 +184,18 @@ fn step_program(instruction_pointer: usize, state: &mut [i32]) -> (usize, Option
             return (instruction_pointer + 4, None);
         }
         (Opcode::Input, pm1, _pm2, _pm3) => {
-            let target_param = state[instruction_pointer + 1];
-            let target_pointer = match pm1 {
-                ParameterMode::Position => target_param as usize,
-                _ => panic!("at &{} -> {}: target parameter only supports position mode.", instruction_pointer, state[instruction_pointer]),
-            };
-            let mut input = String::new();
-            println!("awaiting input for &{}", target_pointer);
-            io::stdin().read_line(&mut input).unwrap();
-            let input_value: i32 = input[..input.len() - 1]
-                .parse()
-                .expect("Couldn't convert input to i32");
-            state[target_pointer] = input_value;
-            return (instruction_pointer + 2, None);
+            if next_input_value.is_some() {
+                let target_param = state[instruction_pointer + 1];
+                let target_pointer = match pm1 {
+                    ParameterMode::Position => target_param as usize,
+                    _ => panic!("at &{} -> {}: target parameter only supports position mode.", instruction_pointer, state[instruction_pointer]),
+                };
+                state[target_pointer] = next_input_value.unwrap();
+                return (instruction_pointer + 2, None);
+            }
+            else {
+                panic!("Encountered input instruction without having any next given input.");
+            }
         }
         (Opcode::Output, pm1, _pm2, _pm3) => {
             let output_param = state[instruction_pointer + 1];
@@ -279,12 +296,12 @@ fn step_program(instruction_pointer: usize, state: &mut [i32]) -> (usize, Option
 fn program_with_less_than_in_immediate_mode() {
     for input in 0..8 {
         let mut program_state = [1107,input,8,1,4,1,99];
-        run_program(&mut program_state);
+        run_program(&mut program_state, Vec::new());
         assert_eq!(program_state[1], 1);
     }
     for input in 8..12 {
         let mut program_state = [1107,input,8,1,4,1,99];
-        run_program(&mut program_state);
+        run_program(&mut program_state, Vec::new());
         assert_eq!(program_state[1], 0);
     }
 }
@@ -293,16 +310,16 @@ fn program_with_less_than_in_immediate_mode() {
 fn program_with_equals_in_immediate_mode() {
     for input in 0..8 {
         let mut program_state = [1108,input,8,1,4,1,99];
-        run_program(&mut program_state);
+        run_program(&mut program_state, Vec::new());
         assert_eq!(program_state[1], 0);
     }
     let input = 8;
     let mut program_state = [1108,input,8,1,4,1,99];
-    run_program(&mut program_state);
+    run_program(&mut program_state, Vec::new());
     assert_eq!(program_state[1], 1);
     for input in 9..12 {
         let mut program_state = [1108,input,8,1,4,1,99];
-        run_program(&mut program_state);
+        run_program(&mut program_state, Vec::new());
         assert_eq!(program_state[1], 0);
     }
 }
@@ -311,12 +328,12 @@ fn program_with_equals_in_immediate_mode() {
 fn program_with_less_than_in_position_mode() {
     for input in 0..8 {
         let mut program_state = [7,7,8,7,4,7,99,input,8];
-        run_program(&mut program_state);
+        run_program(&mut program_state, Vec::new());
         assert_eq!(program_state[7], 1);
     }
     for input in 8..12 {
         let mut program_state = [7,7,8,7,4,7,99,input,8];
-        run_program(&mut program_state);
+        run_program(&mut program_state, Vec::new());
         assert_eq!(program_state[7], 0);
     }
 }
@@ -325,16 +342,16 @@ fn program_with_less_than_in_position_mode() {
 fn program_with_equals_in_position_mode() {
     for input in 0..8 {
         let mut program_state = [8,7,8,7,4,7,99,input,8];
-        run_program(&mut program_state);
+        run_program(&mut program_state, Vec::new());
         assert_eq!(program_state[7], 0);
     }
     let input = 8;
     let mut program_state = [8,7,8,7,4,7,99,input,8];
-    run_program(&mut program_state);
+    run_program(&mut program_state, Vec::new());
     assert_eq!(program_state[7], 1);
     for input in 9..12 {
         let mut program_state = [8,7,8,7,4,7,99,input,8];
-        run_program(&mut program_state);
+        run_program(&mut program_state, Vec::new());
         assert_eq!(program_state[7], 0);
     }
 }
@@ -343,11 +360,11 @@ fn program_with_equals_in_position_mode() {
 fn program_with_jump_in_position_mode() {
     let input = 0;
     let mut program_state = [6,10,13,1,11,12,11,4,11,99,input,0,1,9];
-    run_program(&mut program_state);
+    run_program(&mut program_state, Vec::new());
     assert_eq!(program_state[11], 0);
     let input = 3;
     let mut program_state = [6,10,13,1,11,12,11,4,11,99,input,0,1,9];
-    run_program(&mut program_state);
+    run_program(&mut program_state, Vec::new());
     assert_eq!(program_state[11], 1);
 }
 
@@ -359,46 +376,46 @@ fn program_with_negative_immediate_values() {
     assert_eq!(instruction.1, ParameterMode::Immediate);
     assert_eq!(instruction.2, ParameterMode::Immediate);
     assert_eq!(instruction.3, ParameterMode::Position);
-    run_program(&mut program_state);
+    run_program(&mut program_state, Vec::new());
     assert_eq!(program_state, [1101,100,-1,4,99]);
 }
 
 #[test]
 fn opcode_add() {
     let mut program_state = [1, 9, 10, 3, 2, 3, 11, 0, 99, 30, 40, 50];
-    assert_eq!(step_program(0, &mut program_state).0, 4);
+    assert_eq!(step_program(0, &mut program_state, None).0, 4);
     assert_eq!(program_state, [1, 9, 10, 70, 2, 3, 11, 0, 99, 30, 40, 50]);
     let mut program_state = [1, 0, 0, 0, 99];
-    assert_eq!(step_program(0, &mut program_state).0, 4);
+    assert_eq!(step_program(0, &mut program_state, None).0, 4);
     assert_eq!(program_state, [2, 0, 0, 0, 99]);
 }
 
 #[test]
 fn opcode_output_supports_immediate_mode() {
     let mut program_state = [104, 0, 99];
-    run_program(&mut program_state); // should output 0, but testing that seems too complicated
+    run_program(&mut program_state, Vec::new()); // should output 0, but testing that seems too complicated
 }
 
 #[test]
 fn opcode_mul() {
     let mut program_state = [1, 9, 10, 70, 2, 3, 11, 0, 99, 30, 40, 50];
-    assert_eq!(step_program(4, &mut program_state).0, 8);
+    assert_eq!(step_program(4, &mut program_state, None).0, 8);
     assert_eq!(
         program_state,
         [3500, 9, 10, 70, 2, 3, 11, 0, 99, 30, 40, 50]
     );
     let mut program_state = [2, 3, 0, 3, 99];
-    assert_eq!(step_program(0, &mut program_state).0, 4);
+    assert_eq!(step_program(0, &mut program_state, None).0, 4);
     assert_eq!(program_state, [2, 3, 0, 6, 99]);
     let mut program_state = [2, 4, 4, 5, 99, 0];
-    assert_eq!(step_program(0, &mut program_state).0, 4);
+    assert_eq!(step_program(0, &mut program_state, None).0, 4);
     assert_eq!(program_state, [2, 4, 4, 5, 99, 9801]);
 }
 
 #[test]
 fn mini_program() {
     let mut program_state = [1, 1, 1, 4, 99, 5, 6, 0, 99];
-    run_program(&mut program_state);
+    run_program(&mut program_state, Vec::new());
     assert_eq!(program_state, [30, 1, 1, 4, 2, 5, 6, 0, 99]);
 }
 
@@ -413,7 +430,7 @@ fn day2_works() {
         6, 127, 2, 127, 10, 131, 1, 131, 6, 135, 2, 6, 135, 139, 1, 139, 5, 143, 1, 9, 143, 147, 1,
         13, 147, 151, 1, 2, 151, 155, 1, 10, 155, 0, 99, 2, 14, 0, 0,
     ];
-    run_program(&mut program_state);
+    run_program(&mut program_state, Vec::new());
     assert_eq!(program_state[0], 19690720);
 }
 
