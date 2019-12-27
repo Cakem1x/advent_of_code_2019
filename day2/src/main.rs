@@ -1,6 +1,6 @@
+use permutohedron::Heap;
 use std::fs::read_to_string;
 use std::io;
-use permutohedron::Heap;
 
 #[allow(dead_code)]
 fn day2() {
@@ -51,15 +51,39 @@ fn day7() {
     let input_state: Vec<i32> = string_to_program_state(&read_to_string("input_day7.txt").unwrap());
     println!("{:?}", input_state);
     let mut max_thruster_value = 0;
-    let mut phase_settings = [0,1,2,3,4];
+    let mut phase_settings = [0, 1, 2, 3, 4];
     for phase_settings_permutation in Heap::new(&mut phase_settings).by_ref() {
         let thruster_value = amplification_circuit(&input_state, phase_settings_permutation);
         if thruster_value > max_thruster_value {
             max_thruster_value = thruster_value;
-            println!("Found new max_thruster_value: {}, with sequence {:?}", max_thruster_value, phase_settings_permutation);
+            println!(
+                "Found new max_thruster_value: {}, with sequence {:?}",
+                max_thruster_value, phase_settings_permutation
+            );
         }
     }
-    println!{"max thruster value: {}", max_thruster_value};
+    println! {"max thruster value: {}", max_thruster_value};
+}
+
+#[allow(dead_code)]
+fn day7_part2() {
+    println!("loading initial state:");
+    let input_state: Vec<i32> = string_to_program_state(&read_to_string("input_day7.txt").unwrap());
+    println!("{:?}", input_state);
+    let mut max_thruster_value = 0;
+    let mut phase_settings = [5, 6, 7, 8, 9];
+    for phase_settings_permutation in Heap::new(&mut phase_settings).by_ref() {
+        let thruster_value =
+            amplification_circuit_with_feedback(&input_state, phase_settings_permutation);
+        if thruster_value > max_thruster_value {
+            max_thruster_value = thruster_value;
+            println!(
+                "Found new max_thruster_value: {}, with sequence {:?}",
+                max_thruster_value, phase_settings_permutation
+            );
+        }
+    }
+    println! {"max thruster value: {}", max_thruster_value};
 }
 
 fn string_to_program_state(input_string: &str) -> Vec<i32> {
@@ -72,7 +96,54 @@ fn string_to_program_state(input_string: &str) -> Vec<i32> {
 fn main() {
     //day2();
     //day5();
-    day7();
+    //day7();
+    day7_part2();
+}
+
+/// For a given program and a set of phase settings, calculate the resulting thruster value
+fn amplification_circuit_with_feedback(program_state: &[i32], phase_settings: [i32; 5]) -> i32 {
+    let mut amplifier_state = [
+        (program_state.to_vec(), 0, 0),
+        (program_state.to_vec(), 0, 0),
+        (program_state.to_vec(), 0, 0),
+        (program_state.to_vec(), 0, 0),
+        (program_state.to_vec(), 0, 0),
+    ];
+    // set amplifiers' phases
+    for (amplifier_id, phase) in phase_settings.iter().enumerate() {
+        println!("Setting phase of amplifier {} to {}", amplifier_id, phase);
+        amplifier_state[amplifier_id].1 = set_phase(amplifier_state[amplifier_id].1, &mut amplifier_state[amplifier_id].0, *phase);
+    }
+    // run until amplifiers terminate
+    let mut not_terminated = true;
+    let mut previous_output = 0;
+    let mut feedback_loop_counter = 0;
+    while not_terminated {
+        for amplifier_id in 0..amplifier_state.len() {
+            let result = run_amplification_program(
+                amplifier_state[amplifier_id].1,
+                &mut amplifier_state[amplifier_id].0,
+                previous_output,
+            );
+            if amplifier_state[amplifier_id].1 == result.0 {
+                not_terminated = false;
+                println!(
+                    "#{} - Amplifier {} terminated.",
+                    feedback_loop_counter, amplifier_id
+                );
+            } else {
+                amplifier_state[amplifier_id].1 = result.0;
+                amplifier_state[amplifier_id].2 = result.1.unwrap();
+                println!(
+                    "#{} - Amplifier {}: {} -> {}.",
+                    feedback_loop_counter, amplifier_id, previous_output, result.1.unwrap()
+                );
+                previous_output = result.1.unwrap();
+            }
+        }
+        feedback_loop_counter += 1;
+    }
+    return amplifier_state[4].2; // thruster value
 }
 
 /// For a given program and a set of phase settings, calculate the resulting thruster value
@@ -87,6 +158,21 @@ fn amplification_circuit(program_state: &[i32], phase_settings: [i32; 5]) -> i32
         //);
     }
     return previous_output;
+}
+
+/// runs an amplification program using a single input until it yields a single output or until it terminates.
+fn run_amplification_program(instruction_pointer: usize, state: &mut [i32], input_value: i32) -> (usize, Option<i32>) {
+    let mut current_instruction_pointer = instruction_pointer;
+    loop {
+        let (new_instr_ptr, output) = step_program(current_instruction_pointer, state, Some(input_value));
+        if output.is_some() {
+            return (new_instr_ptr, output);
+        } else if new_instr_ptr == current_instruction_pointer {
+            assert_eq!(output.is_none(), true);
+            return (new_instr_ptr, None);
+        }
+        current_instruction_pointer = new_instr_ptr;
+    }
 }
 
 fn run_program(state: &mut [i32], mut input_values: Vec<i32>) -> Vec<i32> {
@@ -113,6 +199,26 @@ fn run_program(state: &mut [i32], mut input_values: Vec<i32>) -> Vec<i32> {
     //println! {"#{} &{}: Terminate.", step_counter, instruction_pointer};
     //println! {"Program output: {:?}", program_output};
     return program_output;
+}
+
+/// runs the program until after an input instruction was executed. Used to set the phase of amplifier programs.
+fn set_phase(
+    instruction_pointer: usize,
+    state: &mut [i32],
+    phase_setting: i32,
+) -> usize {
+    let mut current_instruction_pointer = instruction_pointer;
+    loop {
+        if parse_instruction(state[current_instruction_pointer]).0 == Opcode::Input {
+            let (next_instruction_pointer, output) = step_program(current_instruction_pointer, state, Some(phase_setting));
+            assert_eq!(output.is_none(), true);
+            return next_instruction_pointer;
+        } else {
+            let (next_instruction_pointer, output) = step_program(current_instruction_pointer, state, None);
+            current_instruction_pointer = next_instruction_pointer;
+            assert_eq!(output.is_none(), true); // program shouldn't yield output before phase is set
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]
