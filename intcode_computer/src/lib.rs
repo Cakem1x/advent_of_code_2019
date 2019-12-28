@@ -1,3 +1,23 @@
+use std::collections::VecDeque;
+
+struct Program {
+    memory: Vec<i32>,
+    instruction_pointer: usize,
+    input: VecDeque<i32>,
+    output: VecDeque<i32>,
+}
+
+impl Program {
+    pub fn init(code: &[i32]) -> Program {
+        return Program {
+            memory: code.to_vec(),
+            instruction_pointer: 0,
+            input: VecDeque::new(),
+            output: VecDeque::new(),
+        };
+    }
+}
+
 /// Runs the program until it terminates, using a fixed vector of inputs. Returns a vector of output data
 pub fn run(state: &mut [i32], mut input_values: Vec<i32>) -> Vec<i32> {
     let mut instruction_pointer = 0;
@@ -26,10 +46,15 @@ pub fn run(state: &mut [i32], mut input_values: Vec<i32>) -> Vec<i32> {
 }
 
 /// runs an amplification program using a single input until it yields a single output or until it terminates.
-pub fn run_until_output_or_termination(instruction_pointer: usize, state: &mut [i32], input_value: i32) -> (usize, Option<i32>) {
+pub fn run_until_output_or_termination(
+    instruction_pointer: usize,
+    state: &mut [i32],
+    input_value: i32,
+) -> (usize, Option<i32>) {
     let mut current_instruction_pointer = instruction_pointer;
     loop {
-        let (new_instr_ptr, output) = step_program(current_instruction_pointer, state, Some(input_value));
+        let (new_instr_ptr, output) =
+            step_program(current_instruction_pointer, state, Some(input_value));
         if output.is_some() {
             return (new_instr_ptr, output);
         } else if new_instr_ptr == current_instruction_pointer {
@@ -49,11 +74,13 @@ pub fn run_until_after_input_instruction(
     let mut current_instruction_pointer = instruction_pointer;
     loop {
         if parse_instruction(state[current_instruction_pointer]).0 == Opcode::Input {
-            let (next_instruction_pointer, output) = step_program(current_instruction_pointer, state, Some(phase_setting));
+            let (next_instruction_pointer, output) =
+                step_program(current_instruction_pointer, state, Some(phase_setting));
             assert_eq!(output.is_none(), true);
             return next_instruction_pointer;
         } else {
-            let (next_instruction_pointer, output) = step_program(current_instruction_pointer, state, None);
+            let (next_instruction_pointer, output) =
+                step_program(current_instruction_pointer, state, None);
             current_instruction_pointer = next_instruction_pointer;
             assert_eq!(output.is_none(), true); // program shouldn't yield output before phase is set
         }
@@ -282,207 +309,211 @@ fn parse_instruction(opcode_int: i32) -> (Opcode, ParameterMode, ParameterMode, 
     return (opcode, pm_first, pm_second, pm_third);
 }
 
-#[test]
-fn program_with_less_than_in_immediate_mode() {
-    for input in 0..8 {
-        let mut program_state = [1107, input, 8, 1, 4, 1, 99];
+#[cfg(test)]
+mod test {
+    use super::*;
+    #[test]
+    fn program_with_less_than_in_immediate_mode() {
+        for input in 0..8 {
+            let mut program_state = [1107, input, 8, 1, 4, 1, 99];
+            run(&mut program_state, Vec::new());
+            assert_eq!(program_state[1], 1);
+        }
+        for input in 8..12 {
+            let mut program_state = [1107, input, 8, 1, 4, 1, 99];
+            run(&mut program_state, Vec::new());
+            assert_eq!(program_state[1], 0);
+        }
+    }
+
+    #[test]
+    fn program_with_equals_in_immediate_mode() {
+        for input in 0..8 {
+            let mut program_state = [1108, input, 8, 1, 4, 1, 99];
+            run(&mut program_state, Vec::new());
+            assert_eq!(program_state[1], 0);
+        }
+        let input = 8;
+        let mut program_state = [1108, input, 8, 1, 4, 1, 99];
         run(&mut program_state, Vec::new());
         assert_eq!(program_state[1], 1);
+        for input in 9..12 {
+            let mut program_state = [1108, input, 8, 1, 4, 1, 99];
+            run(&mut program_state, Vec::new());
+            assert_eq!(program_state[1], 0);
+        }
     }
-    for input in 8..12 {
-        let mut program_state = [1107, input, 8, 1, 4, 1, 99];
-        run(&mut program_state, Vec::new());
-        assert_eq!(program_state[1], 0);
-    }
-}
 
-#[test]
-fn program_with_equals_in_immediate_mode() {
-    for input in 0..8 {
-        let mut program_state = [1108, input, 8, 1, 4, 1, 99];
-        run(&mut program_state, Vec::new());
-        assert_eq!(program_state[1], 0);
+    #[test]
+    fn program_with_less_than_in_position_mode() {
+        for input in 0..8 {
+            let mut program_state = [7, 7, 8, 7, 4, 7, 99, input, 8];
+            run(&mut program_state, Vec::new());
+            assert_eq!(program_state[7], 1);
+        }
+        for input in 8..12 {
+            let mut program_state = [7, 7, 8, 7, 4, 7, 99, input, 8];
+            run(&mut program_state, Vec::new());
+            assert_eq!(program_state[7], 0);
+        }
     }
-    let input = 8;
-    let mut program_state = [1108, input, 8, 1, 4, 1, 99];
-    run(&mut program_state, Vec::new());
-    assert_eq!(program_state[1], 1);
-    for input in 9..12 {
-        let mut program_state = [1108, input, 8, 1, 4, 1, 99];
-        run(&mut program_state, Vec::new());
-        assert_eq!(program_state[1], 0);
-    }
-}
 
-#[test]
-fn program_with_less_than_in_position_mode() {
-    for input in 0..8 {
-        let mut program_state = [7, 7, 8, 7, 4, 7, 99, input, 8];
+    #[test]
+    fn program_with_equals_in_position_mode() {
+        for input in 0..8 {
+            let mut program_state = [8, 7, 8, 7, 4, 7, 99, input, 8];
+            run(&mut program_state, Vec::new());
+            assert_eq!(program_state[7], 0);
+        }
+        let input = 8;
+        let mut program_state = [8, 7, 8, 7, 4, 7, 99, input, 8];
         run(&mut program_state, Vec::new());
         assert_eq!(program_state[7], 1);
+        for input in 9..12 {
+            let mut program_state = [8, 7, 8, 7, 4, 7, 99, input, 8];
+            run(&mut program_state, Vec::new());
+            assert_eq!(program_state[7], 0);
+        }
     }
-    for input in 8..12 {
-        let mut program_state = [7, 7, 8, 7, 4, 7, 99, input, 8];
+
+    #[test]
+    fn program_with_jump_in_position_mode() {
+        let input = 0;
+        let mut program_state = [6, 10, 13, 1, 11, 12, 11, 4, 11, 99, input, 0, 1, 9];
         run(&mut program_state, Vec::new());
-        assert_eq!(program_state[7], 0);
-    }
-}
-
-#[test]
-fn program_with_equals_in_position_mode() {
-    for input in 0..8 {
-        let mut program_state = [8, 7, 8, 7, 4, 7, 99, input, 8];
+        assert_eq!(program_state[11], 0);
+        let input = 3;
+        let mut program_state = [6, 10, 13, 1, 11, 12, 11, 4, 11, 99, input, 0, 1, 9];
         run(&mut program_state, Vec::new());
-        assert_eq!(program_state[7], 0);
+        assert_eq!(program_state[11], 1);
     }
-    let input = 8;
-    let mut program_state = [8, 7, 8, 7, 4, 7, 99, input, 8];
-    run(&mut program_state, Vec::new());
-    assert_eq!(program_state[7], 1);
-    for input in 9..12 {
-        let mut program_state = [8, 7, 8, 7, 4, 7, 99, input, 8];
+
+    #[test]
+    fn program_with_negative_immediate_values() {
+        let mut program_state = [1101, 100, -1, 4, 0];
+        let instruction = parse_instruction(program_state[0]);
+        assert_eq!(instruction.0, Opcode::Add);
+        assert_eq!(instruction.1, ParameterMode::Immediate);
+        assert_eq!(instruction.2, ParameterMode::Immediate);
+        assert_eq!(instruction.3, ParameterMode::Position);
         run(&mut program_state, Vec::new());
-        assert_eq!(program_state[7], 0);
+        assert_eq!(program_state, [1101, 100, -1, 4, 99]);
     }
-}
 
-#[test]
-fn program_with_jump_in_position_mode() {
-    let input = 0;
-    let mut program_state = [6, 10, 13, 1, 11, 12, 11, 4, 11, 99, input, 0, 1, 9];
-    run(&mut program_state, Vec::new());
-    assert_eq!(program_state[11], 0);
-    let input = 3;
-    let mut program_state = [6, 10, 13, 1, 11, 12, 11, 4, 11, 99, input, 0, 1, 9];
-    run(&mut program_state, Vec::new());
-    assert_eq!(program_state[11], 1);
-}
+    #[test]
+    fn opcode_add() {
+        let mut program_state = [1, 9, 10, 3, 2, 3, 11, 0, 99, 30, 40, 50];
+        assert_eq!(step_program(0, &mut program_state, None).0, 4);
+        assert_eq!(program_state, [1, 9, 10, 70, 2, 3, 11, 0, 99, 30, 40, 50]);
+        let mut program_state = [1, 0, 0, 0, 99];
+        assert_eq!(step_program(0, &mut program_state, None).0, 4);
+        assert_eq!(program_state, [2, 0, 0, 0, 99]);
+    }
 
-#[test]
-fn program_with_negative_immediate_values() {
-    let mut program_state = [1101, 100, -1, 4, 0];
-    let instruction = parse_instruction(program_state[0]);
-    assert_eq!(instruction.0, Opcode::Add);
-    assert_eq!(instruction.1, ParameterMode::Immediate);
-    assert_eq!(instruction.2, ParameterMode::Immediate);
-    assert_eq!(instruction.3, ParameterMode::Position);
-    run(&mut program_state, Vec::new());
-    assert_eq!(program_state, [1101, 100, -1, 4, 99]);
-}
+    #[test]
+    fn opcode_output_supports_immediate_mode() {
+        let mut program_state = [104, 0, 99];
+        run(&mut program_state, Vec::new()); // should output 0, but testing that seems too complicated
+    }
 
-#[test]
-fn opcode_add() {
-    let mut program_state = [1, 9, 10, 3, 2, 3, 11, 0, 99, 30, 40, 50];
-    assert_eq!(step_program(0, &mut program_state, None).0, 4);
-    assert_eq!(program_state, [1, 9, 10, 70, 2, 3, 11, 0, 99, 30, 40, 50]);
-    let mut program_state = [1, 0, 0, 0, 99];
-    assert_eq!(step_program(0, &mut program_state, None).0, 4);
-    assert_eq!(program_state, [2, 0, 0, 0, 99]);
-}
+    #[test]
+    fn opcode_mul() {
+        let mut program_state = [1, 9, 10, 70, 2, 3, 11, 0, 99, 30, 40, 50];
+        assert_eq!(step_program(4, &mut program_state, None).0, 8);
+        assert_eq!(
+            program_state,
+            [3500, 9, 10, 70, 2, 3, 11, 0, 99, 30, 40, 50]
+        );
+        let mut program_state = [2, 3, 0, 3, 99];
+        assert_eq!(step_program(0, &mut program_state, None).0, 4);
+        assert_eq!(program_state, [2, 3, 0, 6, 99]);
+        let mut program_state = [2, 4, 4, 5, 99, 0];
+        assert_eq!(step_program(0, &mut program_state, None).0, 4);
+        assert_eq!(program_state, [2, 4, 4, 5, 99, 9801]);
+    }
 
-#[test]
-fn opcode_output_supports_immediate_mode() {
-    let mut program_state = [104, 0, 99];
-    run(&mut program_state, Vec::new()); // should output 0, but testing that seems too complicated
-}
+    #[test]
+    fn mini_program() {
+        let mut program_state = [1, 1, 1, 4, 99, 5, 6, 0, 99];
+        run(&mut program_state, Vec::new());
+        assert_eq!(program_state, [30, 1, 1, 4, 2, 5, 6, 0, 99]);
+    }
 
-#[test]
-fn opcode_mul() {
-    let mut program_state = [1, 9, 10, 70, 2, 3, 11, 0, 99, 30, 40, 50];
-    assert_eq!(step_program(4, &mut program_state, None).0, 8);
-    assert_eq!(
-        program_state,
-        [3500, 9, 10, 70, 2, 3, 11, 0, 99, 30, 40, 50]
-    );
-    let mut program_state = [2, 3, 0, 3, 99];
-    assert_eq!(step_program(0, &mut program_state, None).0, 4);
-    assert_eq!(program_state, [2, 3, 0, 6, 99]);
-    let mut program_state = [2, 4, 4, 5, 99, 0];
-    assert_eq!(step_program(0, &mut program_state, None).0, 4);
-    assert_eq!(program_state, [2, 4, 4, 5, 99, 9801]);
-}
+    #[test]
+    #[should_panic]
+    fn parse_instruction_panics() {
+        let instruction = 28;
+        parse_instruction(instruction);
+    }
 
-#[test]
-fn mini_program() {
-    let mut program_state = [1, 1, 1, 4, 99, 5, 6, 0, 99];
-    run(&mut program_state, Vec::new());
-    assert_eq!(program_state, [30, 1, 1, 4, 2, 5, 6, 0, 99]);
-}
+    #[test]
+    fn parse_instruction_add() {
+        let instruction = 1;
+        assert_eq!(parse_instruction(instruction).0, Opcode::Add);
+        assert_eq!(parse_instruction(instruction).1, ParameterMode::Position);
+        assert_eq!(parse_instruction(instruction).2, ParameterMode::Position);
+        assert_eq!(parse_instruction(instruction).3, ParameterMode::Position);
+    }
 
-#[test]
-#[should_panic]
-fn parse_instruction_panics() {
-    let instruction = 28;
-    parse_instruction(instruction);
-}
+    #[test]
+    fn parse_instruction_mul() {
+        let instruction = 2;
+        assert_eq!(parse_instruction(instruction).0, Opcode::Mul);
+        assert_eq!(parse_instruction(instruction).1, ParameterMode::Position);
+        assert_eq!(parse_instruction(instruction).2, ParameterMode::Position);
+        assert_eq!(parse_instruction(instruction).3, ParameterMode::Position);
+    }
 
-#[test]
-fn parse_instruction_add() {
-    let instruction = 1;
-    assert_eq!(parse_instruction(instruction).0, Opcode::Add);
-    assert_eq!(parse_instruction(instruction).1, ParameterMode::Position);
-    assert_eq!(parse_instruction(instruction).2, ParameterMode::Position);
-    assert_eq!(parse_instruction(instruction).3, ParameterMode::Position);
-}
+    #[test]
+    fn parse_instruction_input() {
+        let instruction = 3;
+        assert_eq!(parse_instruction(instruction).0, Opcode::Input);
+        assert_eq!(parse_instruction(instruction).1, ParameterMode::Position);
+    }
 
-#[test]
-fn parse_instruction_mul() {
-    let instruction = 2;
-    assert_eq!(parse_instruction(instruction).0, Opcode::Mul);
-    assert_eq!(parse_instruction(instruction).1, ParameterMode::Position);
-    assert_eq!(parse_instruction(instruction).2, ParameterMode::Position);
-    assert_eq!(parse_instruction(instruction).3, ParameterMode::Position);
-}
+    #[test]
+    fn parse_instruction_output() {
+        let instruction = 4;
+        assert_eq!(parse_instruction(instruction).0, Opcode::Output);
+        assert_eq!(parse_instruction(instruction).1, ParameterMode::Position);
+    }
 
-#[test]
-fn parse_instruction_input() {
-    let instruction = 3;
-    assert_eq!(parse_instruction(instruction).0, Opcode::Input);
-    assert_eq!(parse_instruction(instruction).1, ParameterMode::Position);
-}
+    #[test]
+    fn parse_instruction_jump_if_true() {
+        let instruction = 5;
+        assert_eq!(parse_instruction(instruction).0, Opcode::JumpIfTrue);
+        assert_eq!(parse_instruction(instruction).1, ParameterMode::Position);
+        assert_eq!(parse_instruction(instruction).2, ParameterMode::Position);
+        let instruction = 1105;
+        assert_eq!(parse_instruction(instruction).0, Opcode::JumpIfTrue);
+        // parse_instruction doesn't check whether given mode is valid
+        assert_eq!(parse_instruction(instruction).1, ParameterMode::Immediate);
+        assert_eq!(parse_instruction(instruction).2, ParameterMode::Immediate);
+    }
 
-#[test]
-fn parse_instruction_output() {
-    let instruction = 4;
-    assert_eq!(parse_instruction(instruction).0, Opcode::Output);
-    assert_eq!(parse_instruction(instruction).1, ParameterMode::Position);
-}
+    #[test]
+    fn parse_instruction_jump_if_false() {
+        let instruction = 6;
+        assert_eq!(parse_instruction(instruction).0, Opcode::JumpIfFalse);
+    }
 
-#[test]
-fn parse_instruction_jump_if_true() {
-    let instruction = 5;
-    assert_eq!(parse_instruction(instruction).0, Opcode::JumpIfTrue);
-    assert_eq!(parse_instruction(instruction).1, ParameterMode::Position);
-    assert_eq!(parse_instruction(instruction).2, ParameterMode::Position);
-    let instruction = 1105;
-    assert_eq!(parse_instruction(instruction).0, Opcode::JumpIfTrue);
-    // parse_instruction doesn't check whether given mode is valid
-    assert_eq!(parse_instruction(instruction).1, ParameterMode::Immediate);
-    assert_eq!(parse_instruction(instruction).2, ParameterMode::Immediate);
-}
+    #[test]
+    fn parse_instruction_less_than() {
+        let instruction = 107;
+        assert_eq!(parse_instruction(instruction).0, Opcode::LessThan);
+    }
 
-#[test]
-fn parse_instruction_jump_if_false() {
-    let instruction = 6;
-    assert_eq!(parse_instruction(instruction).0, Opcode::JumpIfFalse);
-}
+    #[test]
+    fn parse_instruction_equals() {
+        let instruction = 8;
+        assert_eq!(parse_instruction(instruction).0, Opcode::Equals);
+    }
 
-#[test]
-fn parse_instruction_less_than() {
-    let instruction = 107;
-    assert_eq!(parse_instruction(instruction).0, Opcode::LessThan);
-}
-
-#[test]
-fn parse_instruction_equals() {
-    let instruction = 8;
-    assert_eq!(parse_instruction(instruction).0, Opcode::Equals);
-}
-
-#[test]
-fn parse_instruction_omit_zero() {
-    assert_eq!(parse_instruction(1002).0, Opcode::Mul);
-    assert_eq!(parse_instruction(1002).1, ParameterMode::Position);
-    assert_eq!(parse_instruction(1002).2, ParameterMode::Immediate);
-    assert_eq!(parse_instruction(1002).3, ParameterMode::Position);
+    #[test]
+    fn parse_instruction_omit_zero() {
+        assert_eq!(parse_instruction(1002).0, Opcode::Mul);
+        assert_eq!(parse_instruction(1002).1, ParameterMode::Position);
+        assert_eq!(parse_instruction(1002).2, ParameterMode::Immediate);
+        assert_eq!(parse_instruction(1002).3, ParameterMode::Position);
+    }
 }

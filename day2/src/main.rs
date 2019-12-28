@@ -1,7 +1,7 @@
+use intcode_computer;
 use permutohedron::Heap;
 use std::fs::read_to_string;
 use std::io;
-use intcode_computer;
 
 #[allow(dead_code)]
 fn day2() {
@@ -66,7 +66,7 @@ fn day7() {
     println! {"max thruster value: {}", max_thruster_value};
 }
 
-#[allow(dead_code)]
+#[test]
 fn day7_part2() {
     println!("loading initial state:");
     let input_state: Vec<i32> = string_to_program_state(&read_to_string("input_day7.txt").unwrap());
@@ -85,6 +85,7 @@ fn day7_part2() {
         }
     }
     println! {"max thruster value: {}", max_thruster_value};
+    assert_eq!(max_thruster_value, 57660948);
 }
 
 fn string_to_program_state(input_string: &str) -> Vec<i32> {
@@ -113,7 +114,11 @@ fn amplification_circuit_with_feedback(program_state: &[i32], phase_settings: [i
     // set amplifiers' phases
     for (amplifier_id, phase) in phase_settings.iter().enumerate() {
         println!("Setting phase of amplifier {} to {}", amplifier_id, phase);
-        amplifier_state[amplifier_id].1 = intcode_computer::run_until_after_input_instruction(amplifier_state[amplifier_id].1, &mut amplifier_state[amplifier_id].0, *phase);
+        amplifier_state[amplifier_id].1 = intcode_computer::run_until_after_input_instruction(
+            amplifier_state[amplifier_id].1,
+            &mut amplifier_state[amplifier_id].0,
+            *phase,
+        );
     }
     // run until amplifiers terminate
     let mut not_terminated = true;
@@ -137,7 +142,10 @@ fn amplification_circuit_with_feedback(program_state: &[i32], phase_settings: [i
                 amplifier_state[amplifier_id].2 = result.1.unwrap();
                 println!(
                     "#{} - Amplifier {}: {} -> {}.",
-                    feedback_loop_counter, amplifier_id, previous_output, result.1.unwrap()
+                    feedback_loop_counter,
+                    amplifier_id,
+                    previous_output,
+                    result.1.unwrap()
                 );
                 previous_output = result.1.unwrap();
             }
