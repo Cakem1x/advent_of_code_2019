@@ -1,6 +1,6 @@
 
 #[derive(Debug, PartialEq)]
-enum Opcode {
+pub enum Opcode {
     Add,
     Mul,
     Input,
@@ -16,6 +16,13 @@ enum Opcode {
 enum ParameterMode {
     Position,
     Immediate,
+}
+
+pub fn parse_program_str(input_string: &str) -> Vec<i32> {
+    return input_string[..input_string.len() - 1] // get rid of \n character
+        .split(",")
+        .map(|s| s.parse::<i32>().expect("failed to convert input to i32"))
+        .collect();
 }
 
 fn parse_instruction(opcode_int: i32) -> (Opcode, ParameterMode, ParameterMode, ParameterMode) {
@@ -49,6 +56,7 @@ fn parse_instruction(opcode_int: i32) -> (Opcode, ParameterMode, ParameterMode, 
     return (opcode, pm_first, pm_second, pm_third);
 }
 
+#[derive(Clone)]
 pub struct Program {
     memory: Vec<i32>,
     instruction_pointer: usize,
@@ -62,7 +70,22 @@ impl Program {
         };
     }
 
-    fn next_opcode(&self) -> Opcode {
+    pub fn init_from_vec(code: Vec<i32>) -> Program {
+        return Program {
+            memory: code,
+            instruction_pointer: 0,
+        };
+    }
+
+    pub fn set_memory(&mut self, at: usize, new_value: i32) {
+        self.memory[at] = new_value;
+    }
+
+    pub fn read_memory(&self, at: usize) -> i32 {
+        return self.memory[at];
+    }
+
+    pub fn next_opcode(&self) -> Opcode {
         return parse_instruction(self.memory[self.instruction_pointer]).0;
     }
 
