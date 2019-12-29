@@ -1,3 +1,4 @@
+use std::convert::TryFrom;
 
 #[derive(Debug, PartialEq)]
 enum Opcode {
@@ -9,6 +10,7 @@ enum Opcode {
     JumpIfFalse,
     LessThan,
     Equals,
+    RelativeBaseOffset,
     Terminate,
 }
 
@@ -35,6 +37,7 @@ fn parse_instruction(opcode_int: i32) -> (Opcode, ParameterMode, ParameterMode, 
         6 => Opcode::JumpIfFalse,
         7 => Opcode::LessThan,
         8 => Opcode::Equals,
+        9 => Opcode::RelativeBaseOffset,
         99 => Opcode::Terminate,
         x => panic!("Invalid opcode found: {}!", x),
     };
@@ -60,6 +63,7 @@ fn parse_instruction(opcode_int: i32) -> (Opcode, ParameterMode, ParameterMode, 
 pub struct Program {
     memory: Vec<i32>,
     instruction_pointer: usize,
+    relative_base: usize,
 }
 
 impl Program {
@@ -67,6 +71,7 @@ impl Program {
         return Program {
             memory: code.to_vec(),
             instruction_pointer: 0,
+            relative_base: 0,
         };
     }
 
@@ -74,6 +79,7 @@ impl Program {
         return Program {
             memory: code,
             instruction_pointer: 0,
+            relative_base: 0,
         };
     }
 
@@ -302,6 +308,15 @@ impl Program {
                 }
                 self.instruction_pointer += 4;
             }
+            (Opcode::RelativeBaseOffset, pm1, _pm2, _pm3) => {
+                let offset_param = self.memory[self.instruction_pointer + 1];
+                let offset_value = match pm1 {
+                    ParameterMode::Position => self.memory[offset_param as usize],
+                    ParameterMode::Immediate => offset_param,
+                };
+                self.relative_base = usize::try_from(self.relative_base as i32 + offset_value).expect("RelativeBaseOffset reduced program's relative base below zero.");
+                self.instruction_pointer += 2;
+            }
             (Opcode::Terminate, _pm1, _pm2, _pm3) => ()
         }
         return output;
@@ -435,6 +450,38 @@ mod test {
         program.step(None);
         assert_eq!(program.instruction_pointer, 4);
         assert_eq!(program.memory, [2, 4, 4, 5, 99, 9801]);
+    }
+
+    #[test]
+    fn relative_base_starts_at_zero() {
+        let program = Program::init(&[109, -200]);
+        assert_eq!(program.relative_base, 0);
+    }
+
+    #[test]
+    fn opcode_relative_base_increase() {
+        let mut program = Program::init(&[109, 19]);
+        program.relative_base = 2000;
+        program.step(None);
+        assert_eq!(program.instruction_pointer, 2);
+        assert_eq!(program.relative_base, 2019);
+    }
+
+    #[test]
+    fn opcode_relative_base_decrease() {
+        let mut program = Program::init(&[109, -200]);
+        program.relative_base = 2000;
+        program.step(None);
+        assert_eq!(program.instruction_pointer, 2);
+        assert_eq!(program.relative_base, 1800);
+    }
+
+    #[test]
+    #[should_panic]
+    fn opcode_relative_base_panics() {
+        let mut program = Program::init(&[109, -200]);
+        program.relative_base = 199;
+        program.step(None);
     }
 
     #[test]
