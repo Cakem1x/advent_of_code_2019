@@ -1,4 +1,3 @@
-use std::collections::VecDeque;
 
 #[derive(Debug, PartialEq)]
 enum Opcode {
@@ -53,8 +52,6 @@ fn parse_instruction(opcode_int: i32) -> (Opcode, ParameterMode, ParameterMode, 
 pub struct Program {
     memory: Vec<i32>,
     instruction_pointer: usize,
-    input: VecDeque<i32>,
-    output: VecDeque<i32>,
 }
 
 impl Program {
@@ -62,8 +59,6 @@ impl Program {
         return Program {
             memory: code.to_vec(),
             instruction_pointer: 0,
-            input: VecDeque::new(),
-            output: VecDeque::new(),
         };
     }
 
