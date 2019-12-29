@@ -50,7 +50,7 @@ fn parse_instruction(opcode_int: i32) -> (Opcode, ParameterMode, ParameterMode, 
     return (opcode, pm_first, pm_second, pm_third);
 }
 
-struct Program {
+pub struct Program {
     memory: Vec<i32>,
     instruction_pointer: usize,
     input: VecDeque<i32>,
@@ -67,13 +67,57 @@ impl Program {
         };
     }
 
-    pub fn next_opcode(&self) -> Opcode {
+    fn next_opcode(&self) -> Opcode {
         return parse_instruction(self.memory[self.instruction_pointer]).0;
     }
 
+    /// Runs the program until it terminates, using a fixed vector of inputs. Returns a vector of output data.
+    pub fn run(&mut self, mut input_values: Vec<i32>) -> Vec<i32> {
+        let mut program_output = Vec::new();
+        loop {
+            match self.next_opcode() {
+                Opcode::Input => {
+                    self.step(input_values.pop());
+                }
+                Opcode::Output => program_output.push(self.step(None).unwrap()),
+                Opcode::Terminate => return program_output,
+                _ => {
+                    self.step(None);
+                }
+            }
+        }
+    }
+
+    /// runs the program input until it yields a single output or until it terminates.
+    pub fn run_until_output_or_terminate(&mut self) -> Option<i32> {
+        loop {
+            match self.next_opcode() {
+                Opcode::Output => return self.step(None),
+                Opcode::Terminate => return None,
+                Opcode::Input => panic!("Encountered Input instruction durign run_until_output_or_terminate!"),
+                _ => self.step(None),
+            };
+        }
+    }
+
+    /// Runs the program until after an input instruction was executed and takes exactly one input instruction.
+    /// Panics when Termination or Output happens during execution.
+    pub fn run_until_input(&mut self, input: i32) {
+        loop {
+            match self.next_opcode() {
+                Opcode::Input => {
+                    self.step(Some(input));
+                    return;
+                }
+                Opcode::Output | Opcode::Terminate => panic!("Encountered Output or Terminate instruction durign run_until_input!"),
+                _ => self.step(None),
+            };
+        }
+    }
+
     /// Executes exactly one instruction, may use a provided input if an input instruction is executed. May provide some output if an output instruction is executed.
-    pub fn step(&self, input: Option<i32>) -> Option<i32> {
-        let output = None;
+    pub fn step(&mut self, input: Option<i32>) -> Option<i32> {
+        let mut output = None;
         match parse_instruction(self.memory[self.instruction_pointer]) {
             (Opcode::Add, pm1, pm2, pm3) => {
                 let first_operand_param = self.memory[self.instruction_pointer + 1];
@@ -242,203 +286,140 @@ impl Program {
     }
 }
 
-/// Runs the program until it terminates, using a fixed vector of inputs. Returns a vector of output data
-pub fn run(state: &mut [i32], mut input_values: Vec<i32>) -> Vec<i32> {
-    let mut instruction_pointer = 0;
-    let mut _step_counter = 0;
-    let mut program_output = Vec::new();
-    //println!("Starting new program with input {:?}", input_values);
-    loop {
-        let input_value = match parse_instruction(state[instruction_pointer]).0 {
-            Opcode::Input => input_values.pop(),
-            _ => None,
-        };
-        let (new_instr_ptr, output) = step_program(instruction_pointer, state, input_value);
-        if new_instr_ptr == instruction_pointer {
-            break;
-        }
-        if output.is_some() {
-            //println! {"#{} &{}: {}", _step_counter, instruction_pointer, output.unwrap()};
-            program_output.push(output.unwrap());
-        }
-        instruction_pointer = new_instr_ptr;
-        _step_counter += 1;
-    }
-    //println! {"#{} &{}: Terminate.", step_counter, instruction_pointer};
-    //println! {"Program output: {:?}", program_output};
-    return program_output;
-}
-
-/// runs an amplification program using a single input until it yields a single output or until it terminates.
-pub fn run_until_output_or_termination(
-    instruction_pointer: usize,
-    state: &mut [i32],
-    input_value: i32,
-) -> (usize, Option<i32>) {
-    let mut current_instruction_pointer = instruction_pointer;
-    loop {
-        let (new_instr_ptr, output) =
-            step_program(current_instruction_pointer, state, Some(input_value));
-        if output.is_some() {
-            return (new_instr_ptr, output);
-        } else if new_instr_ptr == current_instruction_pointer {
-            assert_eq!(output.is_none(), true);
-            return (new_instr_ptr, None);
-        }
-        current_instruction_pointer = new_instr_ptr;
-    }
-}
-
-/// runs the program until after an input instruction was executed. Used to set the phase of amplifier programs.
-pub fn run_until_after_input_instruction(
-    instruction_pointer: usize,
-    state: &mut [i32],
-    phase_setting: i32,
-) -> usize {
-    let mut current_instruction_pointer = instruction_pointer;
-    loop {
-        if parse_instruction(state[current_instruction_pointer]).0 == Opcode::Input {
-            let (next_instruction_pointer, output) =
-                step_program(current_instruction_pointer, state, Some(phase_setting));
-            assert_eq!(output.is_none(), true);
-            return next_instruction_pointer;
-        } else {
-            let (next_instruction_pointer, output) =
-                step_program(current_instruction_pointer, state, None);
-            current_instruction_pointer = next_instruction_pointer;
-            assert_eq!(output.is_none(), true); // program shouldn't yield output before phase is set
-        }
-    }
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
     #[test]
     fn program_with_less_than_in_immediate_mode() {
         for input in 0..8 {
-            let mut program_state = [1107, input, 8, 1, 4, 1, 99];
-            run(&mut program_state, Vec::new());
-            assert_eq!(program_state[1], 1);
+            let mut program = Program::init(&[1107, input, 8, 1, 4, 1, 99]);
+            program.run(Vec::new());
+            assert_eq!(program.memory[1], 1);
         }
         for input in 8..12 {
-            let mut program_state = [1107, input, 8, 1, 4, 1, 99];
-            run(&mut program_state, Vec::new());
-            assert_eq!(program_state[1], 0);
+            let mut program = Program::init(&[1107, input, 8, 1, 4, 1, 99]);
+            program.run(Vec::new());
+            assert_eq!(program.memory[1], 0);
         }
     }
 
     #[test]
     fn program_with_equals_in_immediate_mode() {
         for input in 0..8 {
-            let mut program_state = [1108, input, 8, 1, 4, 1, 99];
-            run(&mut program_state, Vec::new());
-            assert_eq!(program_state[1], 0);
+            let mut program = Program::init(&[1108, input, 8, 1, 4, 1, 99]);
+            program.run(Vec::new());
+            assert_eq!(program.memory[1], 0);
         }
         let input = 8;
-        let mut program_state = [1108, input, 8, 1, 4, 1, 99];
-        run(&mut program_state, Vec::new());
-        assert_eq!(program_state[1], 1);
+        let mut program = Program::init(&[1108, input, 8, 1, 4, 1, 99]);
+        program.run(Vec::new());
+        assert_eq!(program.memory[1], 1);
         for input in 9..12 {
-            let mut program_state = [1108, input, 8, 1, 4, 1, 99];
-            run(&mut program_state, Vec::new());
-            assert_eq!(program_state[1], 0);
+            let mut program = Program::init(&[1108, input, 8, 1, 4, 1, 99]);
+            program.run(Vec::new());
+            assert_eq!(program.memory[1], 0);
         }
     }
 
     #[test]
     fn program_with_less_than_in_position_mode() {
         for input in 0..8 {
-            let mut program_state = [7, 7, 8, 7, 4, 7, 99, input, 8];
-            run(&mut program_state, Vec::new());
-            assert_eq!(program_state[7], 1);
+            let mut program = Program::init(&[7, 7, 8, 7, 4, 7, 99, input, 8]);
+            program.run(Vec::new());
+            assert_eq!(program.memory[7], 1);
         }
         for input in 8..12 {
-            let mut program_state = [7, 7, 8, 7, 4, 7, 99, input, 8];
-            run(&mut program_state, Vec::new());
-            assert_eq!(program_state[7], 0);
+            let mut program = Program::init(&[7, 7, 8, 7, 4, 7, 99, input, 8]);
+            program.run(Vec::new());
+            assert_eq!(program.memory[7], 0);
         }
     }
 
     #[test]
     fn program_with_equals_in_position_mode() {
         for input in 0..8 {
-            let mut program_state = [8, 7, 8, 7, 4, 7, 99, input, 8];
-            run(&mut program_state, Vec::new());
-            assert_eq!(program_state[7], 0);
+            let mut program = Program::init(&[8, 7, 8, 7, 4, 7, 99, input, 8]);
+            program.run(Vec::new());
+            assert_eq!(program.memory[7], 0);
         }
         let input = 8;
-        let mut program_state = [8, 7, 8, 7, 4, 7, 99, input, 8];
-        run(&mut program_state, Vec::new());
-        assert_eq!(program_state[7], 1);
+        let mut program = Program::init(&[8, 7, 8, 7, 4, 7, 99, input, 8]);
+        program.run(Vec::new());
+        assert_eq!(program.memory[7], 1);
         for input in 9..12 {
-            let mut program_state = [8, 7, 8, 7, 4, 7, 99, input, 8];
-            run(&mut program_state, Vec::new());
-            assert_eq!(program_state[7], 0);
+            let mut program = Program::init(&[8, 7, 8, 7, 4, 7, 99, input, 8]);
+            program.run(Vec::new());
+            assert_eq!(program.memory[7], 0);
         }
     }
 
     #[test]
     fn program_with_jump_in_position_mode() {
         let input = 0;
-        let mut program_state = [6, 10, 13, 1, 11, 12, 11, 4, 11, 99, input, 0, 1, 9];
-        run(&mut program_state, Vec::new());
-        assert_eq!(program_state[11], 0);
+        let mut program = Program::init(&[6, 10, 13, 1, 11, 12, 11, 4, 11, 99, input, 0, 1, 9]);
+        program.run(Vec::new());
+        assert_eq!(program.memory[11], 0);
         let input = 3;
-        let mut program_state = [6, 10, 13, 1, 11, 12, 11, 4, 11, 99, input, 0, 1, 9];
-        run(&mut program_state, Vec::new());
-        assert_eq!(program_state[11], 1);
+        let mut program = Program::init(&[6, 10, 13, 1, 11, 12, 11, 4, 11, 99, input, 0, 1, 9]);
+        program.run(Vec::new());
+        assert_eq!(program.memory[11], 1);
     }
 
     #[test]
     fn program_with_negative_immediate_values() {
-        let mut program_state = [1101, 100, -1, 4, 0];
-        let instruction = parse_instruction(program_state[0]);
+        let mut program = Program::init(&[1101, 100, -1, 4, 0]);
+        let instruction = parse_instruction(program.memory[0]);
         assert_eq!(instruction.0, Opcode::Add);
         assert_eq!(instruction.1, ParameterMode::Immediate);
         assert_eq!(instruction.2, ParameterMode::Immediate);
         assert_eq!(instruction.3, ParameterMode::Position);
-        run(&mut program_state, Vec::new());
-        assert_eq!(program_state, [1101, 100, -1, 4, 99]);
+        program.run(Vec::new());
+        assert_eq!(program.memory, [1101, 100, -1, 4, 99]);
     }
 
     #[test]
     fn opcode_add() {
-        let mut program_state = [1, 9, 10, 3, 2, 3, 11, 0, 99, 30, 40, 50];
-        assert_eq!(step_program(0, &mut program_state, None).0, 4);
-        assert_eq!(program_state, [1, 9, 10, 70, 2, 3, 11, 0, 99, 30, 40, 50]);
-        let mut program_state = [1, 0, 0, 0, 99];
-        assert_eq!(step_program(0, &mut program_state, None).0, 4);
-        assert_eq!(program_state, [2, 0, 0, 0, 99]);
+        let mut program = Program::init(&[1, 9, 10, 3, 2, 3, 11, 0, 99, 30, 40, 50]);
+        program.step(None);
+        assert_eq!(program.instruction_pointer, 4);
+        assert_eq!(program.memory, [1, 9, 10, 70, 2, 3, 11, 0, 99, 30, 40, 50]);
+        let mut program = Program::init(&[1, 0, 0, 0, 99]);
+        program.step(None);
+        assert_eq!(program.instruction_pointer, 4);
+        assert_eq!(program.memory, [2, 0, 0, 0, 99]);
     }
 
     #[test]
     fn opcode_output_supports_immediate_mode() {
-        let mut program_state = [104, 0, 99];
-        run(&mut program_state, Vec::new()); // should output 0, but testing that seems too complicated
+        let mut program = Program::init(&[104, 0, 99]);
+        program.run(Vec::new()); // should output 0, but testing that seems too complicated
     }
 
     #[test]
     fn opcode_mul() {
-        let mut program_state = [1, 9, 10, 70, 2, 3, 11, 0, 99, 30, 40, 50];
-        assert_eq!(step_program(4, &mut program_state, None).0, 8);
+        let mut program = Program::init(&[1, 9, 10, 70, 2, 3, 11, 0, 99, 30, 40, 50]);
+        program.instruction_pointer = 4;
+        program.step(None);
+        assert_eq!(program.instruction_pointer, 8);
         assert_eq!(
-            program_state,
+            program.memory,
             [3500, 9, 10, 70, 2, 3, 11, 0, 99, 30, 40, 50]
         );
-        let mut program_state = [2, 3, 0, 3, 99];
-        assert_eq!(step_program(0, &mut program_state, None).0, 4);
-        assert_eq!(program_state, [2, 3, 0, 6, 99]);
-        let mut program_state = [2, 4, 4, 5, 99, 0];
-        assert_eq!(step_program(0, &mut program_state, None).0, 4);
-        assert_eq!(program_state, [2, 4, 4, 5, 99, 9801]);
+        let mut program = Program::init(&[2, 3, 0, 3, 99]);
+        program.step(None);
+        assert_eq!(program.instruction_pointer, 4);
+        assert_eq!(program.memory, [2, 3, 0, 6, 99]);
+        let mut program = Program::init(&[2, 4, 4, 5, 99, 0]);
+        program.step(None);
+        assert_eq!(program.instruction_pointer, 4);
+        assert_eq!(program.memory, [2, 4, 4, 5, 99, 9801]);
     }
 
     #[test]
     fn mini_program() {
-        let mut program_state = [1, 1, 1, 4, 99, 5, 6, 0, 99];
-        run(&mut program_state, Vec::new());
-        assert_eq!(program_state, [30, 1, 1, 4, 2, 5, 6, 0, 99]);
+        let mut program = Program::init(&[1, 1, 1, 4, 99, 5, 6, 0, 99]);
+        program.run(Vec::new());
+        assert_eq!(program.memory, [30, 1, 1, 4, 2, 5, 6, 0, 99]);
     }
 
     #[test]
