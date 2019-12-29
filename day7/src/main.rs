@@ -65,27 +65,24 @@ fn amplification_circuit_with_feedback(program_state: &[i32], phase_settings: [i
     let mut feedback_loop_counter = 0;
     while not_terminated {
         for (amplifier_id, program) in amplifier_programs.iter_mut().enumerate() {
-            if program.next_opcode() != intcode_computer::Opcode::Terminate {
+            if program.will_terminate() {
+                not_terminated = false;
+                println!(
+                    "#{} - Amplifier {} terminated.",
+                    feedback_loop_counter, amplifier_id
+                );
+            } else {
                 program.run_until_input(previous_output);
-            }
-            match program.run_until_output_or_terminate() {
-                None => {
-                    not_terminated = false;
-                    println!(
-                        "#{} - Amplifier {} terminated.",
-                        feedback_loop_counter, amplifier_id
-                    );
-                }
-                x => {
-                    println!(
-                        "#{} - Amplifier {}: {} -> {}.",
-                        feedback_loop_counter,
-                        amplifier_id,
-                        previous_output,
-                        x.unwrap()
-                    );
-                    previous_output = x.unwrap();
-                }
+                let new_output = program.run_until_output_or_terminate();
+                assert_eq!(new_output.is_some(), true);
+                println!(
+                    "#{} - Amplifier {}: {} -> {}.",
+                    feedback_loop_counter,
+                    amplifier_id,
+                    previous_output,
+                    new_output.unwrap(),
+                );
+                previous_output = new_output.unwrap();
             }
         }
         feedback_loop_counter += 1;

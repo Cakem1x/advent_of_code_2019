@@ -1,6 +1,6 @@
 
 #[derive(Debug, PartialEq)]
-pub enum Opcode {
+enum Opcode {
     Add,
     Mul,
     Input,
@@ -85,7 +85,11 @@ impl Program {
         return self.memory[at];
     }
 
-    pub fn next_opcode(&self) -> Opcode {
+    pub fn will_terminate(&self) -> bool {
+        return self.next_opcode() == Opcode::Terminate;
+    }
+
+    fn next_opcode(&self) -> Opcode {
         return parse_instruction(self.memory[self.instruction_pointer]).0;
     }
 
