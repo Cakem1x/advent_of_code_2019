@@ -4,7 +4,7 @@ use std::fs::read_to_string;
 fn main() {
     println!("loading initial state:");
     let code = intcode_computer::parse_program_str(&read_to_string("input.txt").unwrap());
-    let basic_program = intcode_computer::Program::init_from_vec(code);
+    let basic_program = intcode_computer::Program::init(&code);
     'outer: for noun in 0..100 {
         for verb in 0..100 {
             let mut altered_program = basic_program.clone();
@@ -40,7 +40,7 @@ fn day2_works() {
         6, 127, 2, 127, 10, 131, 1, 131, 6, 135, 2, 6, 135, 139, 1, 139, 5, 143, 1, 9, 143, 147, 1,
         13, 147, 151, 1, 2, 151, 155, 1, 10, 155, 0, 99, 2, 14, 0, 0,
     ];
-    let mut program = intcode_computer::Program::init(&program_state);
+    let mut program = intcode_computer::Program::init(&program_state.to_vec());
     program.run(Vec::new());
     assert_eq!(program.read_memory(0), 19690720);
 }
