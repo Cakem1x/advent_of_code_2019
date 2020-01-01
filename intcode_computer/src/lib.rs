@@ -22,14 +22,14 @@ enum ParameterMode {
     Relative,
 }
 
-pub fn parse_program_str(input_string: &str) -> Vec<i32> {
+pub fn parse_program_str(input_string: &str) -> Vec<i64> {
     return input_string[..input_string.len() - 1] // get rid of \n character
         .split(",")
-        .map(|s| s.parse::<i32>().expect("failed to convert input to i32"))
+        .map(|s| s.parse::<i64>().expect("failed to convert input to i64"))
         .collect();
 }
 
-fn parse_instruction(opcode_int: i32) -> (Opcode, ParameterMode, ParameterMode, ParameterMode) {
+fn parse_instruction(opcode_int: i64) -> (Opcode, ParameterMode, ParameterMode, ParameterMode) {
     let opcode = match opcode_int % 100 {
         1 => Opcode::Add,
         2 => Opcode::Mul,
@@ -66,13 +66,13 @@ fn parse_instruction(opcode_int: i32) -> (Opcode, ParameterMode, ParameterMode, 
 
 #[derive(Clone)]
 pub struct Program {
-    memory: HashMap<usize,i32>,
+    memory: HashMap<usize,i64>,
     instruction_pointer: usize,
     relative_base: usize,
 }
 
 impl Program {
-    pub fn init<'a>(code: impl IntoIterator<Item=&'a i32>) -> Program {
+    pub fn init<'a>(code: impl IntoIterator<Item=&'a i64>) -> Program {
         return Program {
             memory: code.into_iter().cloned().enumerate().collect(),
             instruction_pointer: 0,
@@ -80,11 +80,11 @@ impl Program {
         };
     }
 
-    pub fn set_memory(&mut self, address: usize, value: i32) {
+    pub fn set_memory(&mut self, address: usize, value: i64) {
         self.memory.insert(address, value);
     }
 
-    pub fn read_memory(&self, at: usize) -> i32 {
+    pub fn read_memory(&self, at: usize) -> i64 {
         return *self.memory.get(&at).unwrap_or(&0);
     }
 
@@ -93,7 +93,7 @@ impl Program {
     }
 
     /// Runs the program until it terminates, using a fixed vector of inputs. Returns a vector of output data.
-    pub fn run(&mut self, mut input_values: Vec<i32>) -> Vec<i32> {
+    pub fn run(&mut self, mut input_values: Vec<i64>) -> Vec<i64> {
         let mut program_output = Vec::new();
         loop {
             match self.next_opcode() {
@@ -110,7 +110,7 @@ impl Program {
     }
 
     /// runs the program input until it yields a single output or until it terminates.
-    pub fn run_until_output_or_terminate(&mut self) -> Option<i32> {
+    pub fn run_until_output_or_terminate(&mut self) -> Option<i64> {
         loop {
             match self.next_opcode() {
                 Opcode::Output => return self.step(None),
@@ -123,7 +123,7 @@ impl Program {
 
     /// Runs the program until after an input instruction was executed and takes exactly one input instruction.
     /// Panics when Termination or Output happens during execution.
-    pub fn run_until_input(&mut self, input: i32) {
+    pub fn run_until_input(&mut self, input: i64) {
         loop {
             match self.next_opcode() {
                 Opcode::Input => {
@@ -136,7 +136,7 @@ impl Program {
         }
     }
 
-    pub fn memory_as_vec(&self) -> Vec<i32> {
+    pub fn memory_as_vec(&self) -> Vec<i64> {
         // get biggest key
         let biggest_address = self.memory.keys().fold(0, |biggest_address_candidate, x| if x < &biggest_address_candidate {biggest_address_candidate} else {*x});
         // craete vec with all zeroes of that size
@@ -149,7 +149,7 @@ impl Program {
     }
 
     /// Executes exactly one instruction, may use a provided input if an input instruction is executed. May provide some output if an output instruction is executed.
-    fn step(&mut self, input: Option<i32>) -> Option<i32> {
+    fn step(&mut self, input: Option<i64>) -> Option<i64> {
         let mut output = None;
         match parse_instruction(self.memory[&self.instruction_pointer]) {
             (Opcode::Add, pm1, pm2, pm3) => {
@@ -217,7 +217,7 @@ impl Program {
             }
             (Opcode::RelativeBaseOffset, pm1, _pm2, _pm3) => {
                 let offset = self.resolve_parameter_to_value(1, pm1);
-                self.relative_base = usize::try_from(self.relative_base as i32 + offset).expect("RelativeBaseOffset reduced program's relative base below zero.");
+                self.relative_base = usize::try_from(self.relative_base as i64 + offset).expect("RelativeBaseOffset reduced program's relative base below zero.");
                 self.instruction_pointer += 2;
             }
             (Opcode::Terminate, _pm1, _pm2, _pm3) => ()
@@ -230,7 +230,7 @@ impl Program {
     }
 
     /// Resolves a parameter into the value it describes, depending on its parameter mode.
-    fn resolve_parameter_to_value(&self, parameter_id: usize, parameter_mode: ParameterMode) -> i32 {
+    fn resolve_parameter_to_value(&self, parameter_id: usize, parameter_mode: ParameterMode) -> i64 {
         match parameter_mode {
             ParameterMode::Immediate => return self.read_memory(self.instruction_pointer + parameter_id),
             ParameterMode::Position => {
@@ -238,7 +238,7 @@ impl Program {
                 return self.read_memory(address);
             }
             ParameterMode::Relative => {
-                let address = usize::try_from(self.read_memory(self.instruction_pointer + parameter_id) + self.relative_base as i32).expect("Relative mode address invalid.");
+                let address = usize::try_from(self.read_memory(self.instruction_pointer + parameter_id) + self.relative_base as i64).expect("Relative mode address invalid.");
                 return self.read_memory(address);
             }
         }
@@ -252,7 +252,7 @@ impl Program {
     fn resolve_parameter_to_result_address(&self, parameter_id: usize, parameter_mode: ParameterMode) -> usize {
         return match parameter_mode {
             ParameterMode::Position => usize::try_from(self.read_memory(self.instruction_pointer + parameter_id)).expect("A parameter that is interpreted as an address is negative."),
-            ParameterMode::Relative => usize::try_from(self.relative_base as i32 + self.read_memory(self.instruction_pointer + parameter_id)).expect("A parameter that is interpreted as an address is negative."),
+            ParameterMode::Relative => usize::try_from(self.relative_base as i64 + self.read_memory(self.instruction_pointer + parameter_id)).expect("A parameter that is interpreted as an address is negative."),
             ParameterMode::Immediate => panic!("Immediate mode is invalid ParameterMode for result addresses."),
         }
     }
@@ -535,5 +535,22 @@ mod test {
         let mut program = Program::init(&code);
         let output = program.run(Vec::new());
         assert_eq!(output, code);
+    }
+
+    #[test]
+    fn test_handle_large_number_output() {
+        let code = [104,1125899906842624,99];
+        let mut program = Program::init(&code);
+        let output = program.run(Vec::new());
+        assert_eq!(output[0], 1125899906842624);
+    }
+
+    #[test]
+    fn test_handle_large_number_multiplication() {
+        let code = [1102,34915192,34915192,7,4,7,99,0];
+        let mut program = Program::init(&code);
+        let output = program.run(Vec::new());
+        println!("output: {:?}", output[0]);
+        assert_eq!(output[0], 1219070632396864);
     }
 }

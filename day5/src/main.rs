@@ -8,9 +8,9 @@ fn main() {
     let mut program = intcode_computer::Program::init(&code);
     let mut input = String::new();
     io::stdin().read_line(&mut input).unwrap();
-    let input_value: i32 = input[..input.len() - 1]
+    let input_value: i64 = input[..input.len() - 1]
         .parse()
-        .expect("Couldn't convert input to i32");
+        .expect("Couldn't convert input to i64");
     let output = program.run([input_value].to_vec());
     println!("Output: {:?}", output);
 }

@@ -46,7 +46,7 @@ fn day7_part2() {
 }
 
 /// For a given program and a set of phase settings, calculate the resulting thruster value
-fn amplification_circuit_with_feedback(program_state: &[i32], phase_settings: [i32; 5]) -> i32 {
+fn amplification_circuit_with_feedback(program_state: &[i64], phase_settings: [i64; 5]) -> i64 {
     let mut amplifier_programs = [
         intcode_computer::Program::init(program_state),
         intcode_computer::Program::init(program_state),
@@ -91,7 +91,7 @@ fn amplification_circuit_with_feedback(program_state: &[i32], phase_settings: [i
 }
 
 /// For a given program and a set of phase settings, calculate the resulting thruster value
-fn amplification_circuit(program_state: &[i32], phase_settings: [i32; 5]) -> i32 {
+fn amplification_circuit(program_state: &[i64], phase_settings: [i64; 5]) -> i64 {
     let mut previous_output = 0;
     for (_amplifier_id, phase) in phase_settings.iter().enumerate() {
         let mut amplifier_program = intcode_computer::Program::init(program_state);
