@@ -95,10 +95,6 @@ impl Program {
         return self.next_opcode() == Opcode::Terminate;
     }
 
-    fn next_opcode(&self) -> Opcode {
-        return parse_instruction(self.memory[self.instruction_pointer]).0;
-    }
-
     /// Runs the program until it terminates, using a fixed vector of inputs. Returns a vector of output data.
     pub fn run(&mut self, mut input_values: Vec<i32>) -> Vec<i32> {
         let mut program_output = Vec::new();
@@ -144,138 +140,63 @@ impl Program {
     }
 
     /// Executes exactly one instruction, may use a provided input if an input instruction is executed. May provide some output if an output instruction is executed.
-    pub fn step(&mut self, input: Option<i32>) -> Option<i32> {
+    fn step(&mut self, input: Option<i32>) -> Option<i32> {
         let mut output = None;
         match parse_instruction(self.memory[self.instruction_pointer]) {
             (Opcode::Add, pm1, pm2, pm3) => {
-                let first_operand_param = self.memory[self.instruction_pointer + 1];
-                let second_operand_param = self.memory[self.instruction_pointer + 2];
-                let result_param = self.memory[self.instruction_pointer + 3];
-                let first_operand_value = match pm1 {
-                    ParameterMode::Position => self.memory[first_operand_param as usize],
-                    ParameterMode::Immediate => first_operand_param,
-                };
-                let second_operand_value = match pm2 {
-                    ParameterMode::Position => self.memory[second_operand_param as usize],
-                    ParameterMode::Immediate => second_operand_param,
-                };
-                let result_value = first_operand_value + second_operand_value;
-                //println!("{} + {} = {}", first_operand_value, second_operand_value, result_value);
-                let result_pointer = match pm3 {
-                    ParameterMode::Position => result_param as usize,
-                    _ => panic!(
-                        "at &{} -> {}: result parameter only supports position mode.",
-                        self.instruction_pointer, self.memory[self.instruction_pointer]
-                    ),
-                };
-                self.memory[result_pointer] = result_value;
+                let first_operand = self.resolve_parameter_to_value(1, pm1);
+                let second_operand = self.resolve_parameter_to_value(2, pm2);
+                let result_address = self.resolve_parameter_to_result_address(3, pm3);
+                let result_value = first_operand + second_operand;
+                self.memory[result_address] = result_value;
                 self.instruction_pointer += 4;
             }
             (Opcode::Mul, pm1, pm2, pm3) => {
-                let first_operand_param = self.memory[self.instruction_pointer + 1];
-                let second_operand_param = self.memory[self.instruction_pointer + 2];
-                let result_param = self.memory[self.instruction_pointer + 3];
-                let first_operand_value = match pm1 {
-                    ParameterMode::Position => self.memory[first_operand_param as usize],
-                    ParameterMode::Immediate => first_operand_param,
-                };
-                let second_operand_value = match pm2 {
-                    ParameterMode::Position => self.memory[second_operand_param as usize],
-                    ParameterMode::Immediate => second_operand_param,
-                };
-                let result_value = first_operand_value * second_operand_value;
-                //println!("{} * {} = {}", first_operand_value, second_operand_value, result_value);
-                let result_pointer = match pm3 {
-                    ParameterMode::Position => result_param as usize,
-                    _ => panic!(
-                        "at &{} -> {}: result parameter only supports position mode.",
-                        self.instruction_pointer, self.memory[self.instruction_pointer]
-                    ),
-                };
-                self.memory[result_pointer] = result_value;
+                let first_operand = self.resolve_parameter_to_value(1, pm1);
+                let second_operand = self.resolve_parameter_to_value(2, pm2);
+                let result_address = self.resolve_parameter_to_result_address(3, pm3);
+                let result_value = first_operand * second_operand;
+                self.memory[result_address] = result_value;
                 self.instruction_pointer += 4;
                 return None;
             }
             (Opcode::Input, pm1, _pm2, _pm3) => {
                 if input.is_some() {
                     //println!("#{}: got value {} during input instruction", self.instruction_pointer, input.unwrap());
-                    let target_param = self.memory[self.instruction_pointer + 1];
-                    let target_pointer = match pm1 {
-                        ParameterMode::Position => target_param as usize,
-                        _ => panic!(
-                            "at &{} -> {}: target parameter only supports position mode.",
-                            self.instruction_pointer, self.memory[self.instruction_pointer]
-                        ),
-                    };
-                    self.memory[target_pointer] = input.unwrap();
+                    let target_address = self.resolve_parameter_to_result_address(1, pm1);
+                    self.memory[target_address] = input.unwrap();
                     self.instruction_pointer += 2;
                 } else {
                     panic!("Encountered input instruction without having any next given input.");
                 }
             }
             (Opcode::Output, pm1, _pm2, _pm3) => {
-                let output_param = self.memory[self.instruction_pointer + 1];
-                let output_value = match pm1 {
-                    ParameterMode::Position => self.memory[output_param as usize],
-                    ParameterMode::Immediate => output_param,
-                };
+                output = Some(self.resolve_parameter_to_value(1, pm1));
                 self.instruction_pointer += 2;
-                output = Some(output_value);
             }
             (Opcode::JumpIfTrue, pm1, pm2, _pm3) => {
-                let condition_param = self.memory[self.instruction_pointer + 1];
-                let condition_value = match pm1 {
-                    ParameterMode::Position => self.memory[condition_param as usize],
-                    ParameterMode::Immediate => condition_param,
-                };
-                let jump_target_param = self.memory[self.instruction_pointer + 2];
-                let jump_target_value = match pm2 {
-                    ParameterMode::Position => self.memory[jump_target_param as usize] as usize,
-                    ParameterMode::Immediate => jump_target_param as usize,
-                };
-                if condition_value != 0 {
-                    self.instruction_pointer = jump_target_value;
+                let condition = self.resolve_parameter_to_value(1, pm1);
+                let jump_target = self.resolve_parameter_to_jump_address(2, pm2);
+                if condition != 0 {
+                    self.instruction_pointer = jump_target;
                 } else {
                     self.instruction_pointer += 3;
                 }
             }
             (Opcode::JumpIfFalse, pm1, pm2, _pm3) => {
-                let condition_param = self.memory[self.instruction_pointer + 1];
-                let condition_value = match pm1 {
-                    ParameterMode::Position => self.memory[condition_param as usize],
-                    ParameterMode::Immediate => condition_param,
-                };
-                let jump_target_param = self.memory[self.instruction_pointer + 2];
-                let jump_target_value = match pm2 {
-                    ParameterMode::Position => self.memory[jump_target_param as usize] as usize,
-                    ParameterMode::Immediate => jump_target_param as usize,
-                };
-                if condition_value == 0 {
-                    self.instruction_pointer = jump_target_value;
+                let condition = self.resolve_parameter_to_value(1, pm1);
+                let jump_target = self.resolve_parameter_to_jump_address(2, pm2);
+                if condition == 0 {
+                    self.instruction_pointer = jump_target;
                 } else {
                     self.instruction_pointer += 3;
                 }
             }
             (Opcode::LessThan, pm1, pm2, pm3) => {
-                let first_operand_param = self.memory[self.instruction_pointer + 1];
-                let first_operand_value = match pm1 {
-                    ParameterMode::Position => self.memory[first_operand_param as usize],
-                    ParameterMode::Immediate => first_operand_param,
-                };
-                let second_operand_param = self.memory[self.instruction_pointer + 2];
-                let second_operand_value = match pm2 {
-                    ParameterMode::Position => self.memory[second_operand_param as usize],
-                    ParameterMode::Immediate => second_operand_param,
-                };
-                let result_param = self.memory[self.instruction_pointer + 3];
-                let result_ptr = match pm3 {
-                    ParameterMode::Position => result_param as usize,
-                    _ => panic!(
-                        "at &{} -> {}: result parameter only supports position mode.",
-                        self.instruction_pointer, self.memory[self.instruction_pointer]
-                    ),
-                };
-                if first_operand_value < second_operand_value {
+                let first_operand = self.resolve_parameter_to_value(1, pm1);
+                let second_operand = self.resolve_parameter_to_value(2, pm2);
+                let result_ptr = self.resolve_parameter_to_result_address(3, pm3);
+                if first_operand < second_operand {
                     self.memory[result_ptr] = 1;
                 } else {
                     self.memory[result_ptr] = 0;
@@ -283,43 +204,49 @@ impl Program {
                 self.instruction_pointer += 4;
             }
             (Opcode::Equals, pm1, pm2, pm3) => {
-                let first_operand_param = self.memory[self.instruction_pointer + 1];
-                let first_operand_value = match pm1 {
-                    ParameterMode::Position => self.memory[first_operand_param as usize],
-                    ParameterMode::Immediate => first_operand_param,
-                };
-                let second_operand_param = self.memory[self.instruction_pointer + 2];
-                let second_operand_value = match pm2 {
-                    ParameterMode::Position => self.memory[second_operand_param as usize],
-                    ParameterMode::Immediate => second_operand_param,
-                };
-                let result_param = self.memory[self.instruction_pointer + 3];
-                let result_ptr = match pm3 {
-                    ParameterMode::Position => result_param as usize,
-                    _ => panic!(
-                        "at &{} -> {}: result parameter only supports position mode.",
-                        self.instruction_pointer, self.memory[self.instruction_pointer]
-                    ),
-                };
-                if first_operand_value == second_operand_value {
-                    self.memory[result_ptr] = 1;
+                let first_operand = self.resolve_parameter_to_value(1, pm1);
+                let second_operand = self.resolve_parameter_to_value(2, pm2);
+                let result_address = self.resolve_parameter_to_result_address(3, pm3);
+                if first_operand == second_operand {
+                    self.memory[result_address] = 1;
                 } else {
-                    self.memory[result_ptr] = 0;
+                    self.memory[result_address] = 0;
                 }
                 self.instruction_pointer += 4;
             }
             (Opcode::RelativeBaseOffset, pm1, _pm2, _pm3) => {
-                let offset_param = self.memory[self.instruction_pointer + 1];
-                let offset_value = match pm1 {
-                    ParameterMode::Position => self.memory[offset_param as usize],
-                    ParameterMode::Immediate => offset_param,
-                };
-                self.relative_base = usize::try_from(self.relative_base as i32 + offset_value).expect("RelativeBaseOffset reduced program's relative base below zero.");
+                let offset = self.resolve_parameter_to_value(1, pm1);
+                self.relative_base = usize::try_from(self.relative_base as i32 + offset).expect("RelativeBaseOffset reduced program's relative base below zero.");
                 self.instruction_pointer += 2;
             }
             (Opcode::Terminate, _pm1, _pm2, _pm3) => ()
         }
         return output;
+    }
+
+    fn next_opcode(&self) -> Opcode {
+        return parse_instruction(self.memory[self.instruction_pointer]).0;
+    }
+
+    /// Resolves a parameter into the value it describes, depending on its parameter mode.
+    fn resolve_parameter_to_value(&self, parameter_id: usize, parameter_mode: ParameterMode) -> i32 {
+        match parameter_mode {
+            ParameterMode::Immediate => return self.memory[self.instruction_pointer + parameter_id],
+            ParameterMode::Position => {
+                let address = usize::try_from(self.memory[self.instruction_pointer + parameter_id]).expect("Parameter in position mode tried to access a negative address.");
+                return self.memory[address];
+            }
+        }
+    }
+
+    fn resolve_parameter_to_jump_address(&self, parameter_id: usize, parameter_mode: ParameterMode) -> usize {
+        return usize::try_from(self.resolve_parameter_to_value(parameter_id, parameter_mode)).expect("invalid address as target of a jump instruction.");
+    }
+
+    /// Resolves a parameter into the address it describes, depending on its parameter mode.
+    fn resolve_parameter_to_result_address(&self, parameter_id: usize, parameter_mode: ParameterMode) -> usize {
+        assert_eq!(parameter_mode, ParameterMode::Position); // addresses only support position mode
+        return usize::try_from(self.memory[self.instruction_pointer + parameter_id]).expect("A parameter that is interpreted as an address is negative.");
     }
 }
 
@@ -567,5 +494,13 @@ mod test {
         assert_eq!(parse_instruction(1002).1, ParameterMode::Position);
         assert_eq!(parse_instruction(1002).2, ParameterMode::Immediate);
         assert_eq!(parse_instruction(1002).3, ParameterMode::Position);
+    }
+
+    #[test]
+    fn test_program_relative_base_duplicates_itself() {
+        let code = [109,1,204,-1,1001,100,1,100,1008,100,16,101,1006,101,0,99];
+        let mut program = Program::init(&code);
+        let output = program.run(Vec::new());
+        assert_eq!(output, code);
     }
 }
