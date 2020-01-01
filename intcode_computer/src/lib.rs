@@ -18,6 +18,7 @@ enum Opcode {
 enum ParameterMode {
     Position,
     Immediate,
+    Relative,
 }
 
 pub fn parse_program_str(input_string: &str) -> Vec<i32> {
@@ -44,16 +45,19 @@ fn parse_instruction(opcode_int: i32) -> (Opcode, ParameterMode, ParameterMode, 
     let pm_first = match opcode_int / 100 % 10 {
         0 => ParameterMode::Position,
         1 => ParameterMode::Immediate,
+        2 => ParameterMode::Relative,
         x => panic!("Invalid parameter mode found: {}!", x),
     };
     let pm_second = match opcode_int / 1000 % 10 {
         0 => ParameterMode::Position,
         1 => ParameterMode::Immediate,
+        2 => ParameterMode::Relative,
         x => panic!("Invalid parameter mode found: {}!", x),
     };
     let pm_third = match opcode_int / 10000 % 10 {
         0 => ParameterMode::Position,
         1 => ParameterMode::Immediate,
+        2 => ParameterMode::Relative,
         x => panic!("Invalid parameter mode found: {}!", x),
     };
     return (opcode, pm_first, pm_second, pm_third);
@@ -236,17 +240,25 @@ impl Program {
                 let address = usize::try_from(self.memory[self.instruction_pointer + parameter_id]).expect("Parameter in position mode tried to access a negative address.");
                 return self.memory[address];
             }
+            ParameterMode::Relative => {
+                let address = usize::try_from(self.memory[self.instruction_pointer + parameter_id] + self.relative_base as i32).expect("Relative mode address invalid.");
+                return self.memory[address];
+            }
         }
     }
 
     fn resolve_parameter_to_jump_address(&self, parameter_id: usize, parameter_mode: ParameterMode) -> usize {
+        assert_ne!(parameter_mode, ParameterMode::Immediate); // addresses don't support position mode
         return usize::try_from(self.resolve_parameter_to_value(parameter_id, parameter_mode)).expect("invalid address as target of a jump instruction.");
     }
 
     /// Resolves a parameter into the address it describes, depending on its parameter mode.
     fn resolve_parameter_to_result_address(&self, parameter_id: usize, parameter_mode: ParameterMode) -> usize {
-        assert_eq!(parameter_mode, ParameterMode::Position); // addresses only support position mode
-        return usize::try_from(self.memory[self.instruction_pointer + parameter_id]).expect("A parameter that is interpreted as an address is negative.");
+        return match parameter_mode {
+            ParameterMode::Position => usize::try_from(self.memory[self.instruction_pointer + parameter_id]).expect("A parameter that is interpreted as an address is negative."),
+            ParameterMode::Relative => usize::try_from(self.relative_base as i32 + self.memory[self.instruction_pointer + parameter_id]).expect("A parameter that is interpreted as an address is negative."),
+            ParameterMode::Immediate => panic!("Immediate mode is invalid ParameterMode for result addresses."),
+        }
     }
 }
 
@@ -494,6 +506,31 @@ mod test {
         assert_eq!(parse_instruction(1002).1, ParameterMode::Position);
         assert_eq!(parse_instruction(1002).2, ParameterMode::Immediate);
         assert_eq!(parse_instruction(1002).3, ParameterMode::Position);
+    }
+
+    #[test]
+    fn relative_base_output_instruction() {
+        let code = [109,19,204,-8,99,0,0,0,0,0,0,42];
+        let mut program = Program::init(&code);
+        let output = program.run(Vec::new());
+        assert_eq!(output[0], 42);
+    }
+
+    #[test]
+    #[should_panic]
+    fn using_negative_memory_address() {
+        let code = [104,-5,99];
+        let mut program = Program::init(&code);
+        let output = program.run(Vec::new());
+        assert_eq!(output[0], 0);
+    }
+
+    #[test]
+    fn using_initialized_memory() {
+        let code = [4,5,99];
+        let mut program = Program::init(&code);
+        let output = program.run(Vec::new());
+        assert_eq!(output[0], 0);
     }
 
     #[test]
