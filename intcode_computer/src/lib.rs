@@ -1,4 +1,5 @@
 use std::convert::TryFrom;
+use std::collections::HashMap;
 
 #[derive(Debug, PartialEq)]
 enum Opcode {
@@ -65,34 +66,26 @@ fn parse_instruction(opcode_int: i32) -> (Opcode, ParameterMode, ParameterMode, 
 
 #[derive(Clone)]
 pub struct Program {
-    memory: Vec<i32>,
+    memory: HashMap<usize,i32>,
     instruction_pointer: usize,
     relative_base: usize,
 }
 
 impl Program {
-    pub fn init(code: &[i32]) -> Program {
+    pub fn init<'a>(code: impl IntoIterator<Item=&'a i32>) -> Program {
         return Program {
-            memory: code.to_vec(),
+            memory: code.into_iter().cloned().enumerate().collect(),
             instruction_pointer: 0,
             relative_base: 0,
         };
     }
 
-    pub fn init_from_vec(code: Vec<i32>) -> Program {
-        return Program {
-            memory: code,
-            instruction_pointer: 0,
-            relative_base: 0,
-        };
-    }
-
-    pub fn set_memory(&mut self, at: usize, new_value: i32) {
-        self.memory[at] = new_value;
+    pub fn set_memory(&mut self, address: usize, value: i32) {
+        self.memory.insert(address, value);
     }
 
     pub fn read_memory(&self, at: usize) -> i32 {
-        return self.memory[at];
+        return *self.memory.get(&at).unwrap_or(&0);
     }
 
     pub fn will_terminate(&self) -> bool {
@@ -143,16 +136,28 @@ impl Program {
         }
     }
 
+    pub fn memory_as_vec(&self) -> Vec<i32> {
+        // get biggest key
+        let biggest_address = self.memory.keys().fold(0, |biggest_address_candidate, x| if x < &biggest_address_candidate {biggest_address_candidate} else {*x});
+        // craete vec with all zeroes of that size
+        let mut memory_as_vec = vec!(0; biggest_address as usize + 1);
+        // iterate over actual memory and set vec
+        for (address, value) in self.memory.iter() {
+            memory_as_vec[*address] = *value;
+        }
+        return memory_as_vec;
+    }
+
     /// Executes exactly one instruction, may use a provided input if an input instruction is executed. May provide some output if an output instruction is executed.
     fn step(&mut self, input: Option<i32>) -> Option<i32> {
         let mut output = None;
-        match parse_instruction(self.memory[self.instruction_pointer]) {
+        match parse_instruction(self.memory[&self.instruction_pointer]) {
             (Opcode::Add, pm1, pm2, pm3) => {
                 let first_operand = self.resolve_parameter_to_value(1, pm1);
                 let second_operand = self.resolve_parameter_to_value(2, pm2);
                 let result_address = self.resolve_parameter_to_result_address(3, pm3);
                 let result_value = first_operand + second_operand;
-                self.memory[result_address] = result_value;
+                self.set_memory(result_address, result_value);
                 self.instruction_pointer += 4;
             }
             (Opcode::Mul, pm1, pm2, pm3) => {
@@ -160,7 +165,7 @@ impl Program {
                 let second_operand = self.resolve_parameter_to_value(2, pm2);
                 let result_address = self.resolve_parameter_to_result_address(3, pm3);
                 let result_value = first_operand * second_operand;
-                self.memory[result_address] = result_value;
+                self.set_memory(result_address, result_value);
                 self.instruction_pointer += 4;
                 return None;
             }
@@ -168,7 +173,7 @@ impl Program {
                 if input.is_some() {
                     //println!("#{}: got value {} during input instruction", self.instruction_pointer, input.unwrap());
                     let target_address = self.resolve_parameter_to_result_address(1, pm1);
-                    self.memory[target_address] = input.unwrap();
+                    self.set_memory(target_address, input.unwrap());
                     self.instruction_pointer += 2;
                 } else {
                     panic!("Encountered input instruction without having any next given input.");
@@ -200,22 +205,14 @@ impl Program {
                 let first_operand = self.resolve_parameter_to_value(1, pm1);
                 let second_operand = self.resolve_parameter_to_value(2, pm2);
                 let result_ptr = self.resolve_parameter_to_result_address(3, pm3);
-                if first_operand < second_operand {
-                    self.memory[result_ptr] = 1;
-                } else {
-                    self.memory[result_ptr] = 0;
-                }
+                self.set_memory(result_ptr, if first_operand < second_operand {1} else {0});
                 self.instruction_pointer += 4;
             }
             (Opcode::Equals, pm1, pm2, pm3) => {
                 let first_operand = self.resolve_parameter_to_value(1, pm1);
                 let second_operand = self.resolve_parameter_to_value(2, pm2);
                 let result_address = self.resolve_parameter_to_result_address(3, pm3);
-                if first_operand == second_operand {
-                    self.memory[result_address] = 1;
-                } else {
-                    self.memory[result_address] = 0;
-                }
+                self.set_memory(result_address, if first_operand == second_operand {1} else {0});
                 self.instruction_pointer += 4;
             }
             (Opcode::RelativeBaseOffset, pm1, _pm2, _pm3) => {
@@ -229,34 +226,33 @@ impl Program {
     }
 
     fn next_opcode(&self) -> Opcode {
-        return parse_instruction(self.memory[self.instruction_pointer]).0;
+        return parse_instruction(self.memory[&self.instruction_pointer]).0;
     }
 
     /// Resolves a parameter into the value it describes, depending on its parameter mode.
     fn resolve_parameter_to_value(&self, parameter_id: usize, parameter_mode: ParameterMode) -> i32 {
         match parameter_mode {
-            ParameterMode::Immediate => return self.memory[self.instruction_pointer + parameter_id],
+            ParameterMode::Immediate => return self.read_memory(self.instruction_pointer + parameter_id),
             ParameterMode::Position => {
-                let address = usize::try_from(self.memory[self.instruction_pointer + parameter_id]).expect("Parameter in position mode tried to access a negative address.");
-                return self.memory[address];
+                let address = usize::try_from(self.read_memory(self.instruction_pointer + parameter_id)).expect("Parameter in position mode tried to access a negative address.");
+                return self.read_memory(address);
             }
             ParameterMode::Relative => {
-                let address = usize::try_from(self.memory[self.instruction_pointer + parameter_id] + self.relative_base as i32).expect("Relative mode address invalid.");
-                return self.memory[address];
+                let address = usize::try_from(self.read_memory(self.instruction_pointer + parameter_id) + self.relative_base as i32).expect("Relative mode address invalid.");
+                return self.read_memory(address);
             }
         }
     }
 
     fn resolve_parameter_to_jump_address(&self, parameter_id: usize, parameter_mode: ParameterMode) -> usize {
-        assert_ne!(parameter_mode, ParameterMode::Immediate); // addresses don't support position mode
         return usize::try_from(self.resolve_parameter_to_value(parameter_id, parameter_mode)).expect("invalid address as target of a jump instruction.");
     }
 
     /// Resolves a parameter into the address it describes, depending on its parameter mode.
     fn resolve_parameter_to_result_address(&self, parameter_id: usize, parameter_mode: ParameterMode) -> usize {
         return match parameter_mode {
-            ParameterMode::Position => usize::try_from(self.memory[self.instruction_pointer + parameter_id]).expect("A parameter that is interpreted as an address is negative."),
-            ParameterMode::Relative => usize::try_from(self.relative_base as i32 + self.memory[self.instruction_pointer + parameter_id]).expect("A parameter that is interpreted as an address is negative."),
+            ParameterMode::Position => usize::try_from(self.read_memory(self.instruction_pointer + parameter_id)).expect("A parameter that is interpreted as an address is negative."),
+            ParameterMode::Relative => usize::try_from(self.relative_base as i32 + self.read_memory(self.instruction_pointer + parameter_id)).expect("A parameter that is interpreted as an address is negative."),
             ParameterMode::Immediate => panic!("Immediate mode is invalid ParameterMode for result addresses."),
         }
     }
@@ -270,12 +266,12 @@ mod test {
         for input in 0..8 {
             let mut program = Program::init(&[1107, input, 8, 1, 4, 1, 99]);
             program.run(Vec::new());
-            assert_eq!(program.memory[1], 1);
+            assert_eq!(program.memory[&1], 1);
         }
         for input in 8..12 {
             let mut program = Program::init(&[1107, input, 8, 1, 4, 1, 99]);
             program.run(Vec::new());
-            assert_eq!(program.memory[1], 0);
+            assert_eq!(program.memory[&1], 0);
         }
     }
 
@@ -284,16 +280,16 @@ mod test {
         for input in 0..8 {
             let mut program = Program::init(&[1108, input, 8, 1, 4, 1, 99]);
             program.run(Vec::new());
-            assert_eq!(program.memory[1], 0);
+            assert_eq!(program.memory[&1], 0);
         }
         let input = 8;
         let mut program = Program::init(&[1108, input, 8, 1, 4, 1, 99]);
         program.run(Vec::new());
-        assert_eq!(program.memory[1], 1);
+        assert_eq!(program.memory[&1], 1);
         for input in 9..12 {
             let mut program = Program::init(&[1108, input, 8, 1, 4, 1, 99]);
             program.run(Vec::new());
-            assert_eq!(program.memory[1], 0);
+            assert_eq!(program.memory[&1], 0);
         }
     }
 
@@ -302,12 +298,12 @@ mod test {
         for input in 0..8 {
             let mut program = Program::init(&[7, 7, 8, 7, 4, 7, 99, input, 8]);
             program.run(Vec::new());
-            assert_eq!(program.memory[7], 1);
+            assert_eq!(program.memory[&7], 1);
         }
         for input in 8..12 {
             let mut program = Program::init(&[7, 7, 8, 7, 4, 7, 99, input, 8]);
             program.run(Vec::new());
-            assert_eq!(program.memory[7], 0);
+            assert_eq!(program.memory[&7], 0);
         }
     }
 
@@ -316,16 +312,16 @@ mod test {
         for input in 0..8 {
             let mut program = Program::init(&[8, 7, 8, 7, 4, 7, 99, input, 8]);
             program.run(Vec::new());
-            assert_eq!(program.memory[7], 0);
+            assert_eq!(program.memory[&7], 0);
         }
         let input = 8;
         let mut program = Program::init(&[8, 7, 8, 7, 4, 7, 99, input, 8]);
         program.run(Vec::new());
-        assert_eq!(program.memory[7], 1);
+        assert_eq!(program.memory[&7], 1);
         for input in 9..12 {
             let mut program = Program::init(&[8, 7, 8, 7, 4, 7, 99, input, 8]);
             program.run(Vec::new());
-            assert_eq!(program.memory[7], 0);
+            assert_eq!(program.memory[&7], 0);
         }
     }
 
@@ -334,23 +330,23 @@ mod test {
         let input = 0;
         let mut program = Program::init(&[6, 10, 13, 1, 11, 12, 11, 4, 11, 99, input, 0, 1, 9]);
         program.run(Vec::new());
-        assert_eq!(program.memory[11], 0);
+        assert_eq!(program.memory[&11], 0);
         let input = 3;
         let mut program = Program::init(&[6, 10, 13, 1, 11, 12, 11, 4, 11, 99, input, 0, 1, 9]);
         program.run(Vec::new());
-        assert_eq!(program.memory[11], 1);
+        assert_eq!(program.memory[&11], 1);
     }
 
     #[test]
     fn program_with_negative_immediate_values() {
         let mut program = Program::init(&[1101, 100, -1, 4, 0]);
-        let instruction = parse_instruction(program.memory[0]);
+        let instruction = parse_instruction(program.memory[&0]);
         assert_eq!(instruction.0, Opcode::Add);
         assert_eq!(instruction.1, ParameterMode::Immediate);
         assert_eq!(instruction.2, ParameterMode::Immediate);
         assert_eq!(instruction.3, ParameterMode::Position);
         program.run(Vec::new());
-        assert_eq!(program.memory, [1101, 100, -1, 4, 99]);
+        assert_eq!(program.memory_as_vec(), [1101, 100, -1, 4, 99]);
     }
 
     #[test]
@@ -358,11 +354,11 @@ mod test {
         let mut program = Program::init(&[1, 9, 10, 3, 2, 3, 11, 0, 99, 30, 40, 50]);
         program.step(None);
         assert_eq!(program.instruction_pointer, 4);
-        assert_eq!(program.memory, [1, 9, 10, 70, 2, 3, 11, 0, 99, 30, 40, 50]);
+        assert_eq!(program.memory_as_vec(), [1, 9, 10, 70, 2, 3, 11, 0, 99, 30, 40, 50]);
         let mut program = Program::init(&[1, 0, 0, 0, 99]);
         program.step(None);
         assert_eq!(program.instruction_pointer, 4);
-        assert_eq!(program.memory, [2, 0, 0, 0, 99]);
+        assert_eq!(program.memory_as_vec(), [2, 0, 0, 0, 99]);
     }
 
     #[test]
@@ -378,17 +374,17 @@ mod test {
         program.step(None);
         assert_eq!(program.instruction_pointer, 8);
         assert_eq!(
-            program.memory,
+            program.memory_as_vec(),
             [3500, 9, 10, 70, 2, 3, 11, 0, 99, 30, 40, 50]
         );
         let mut program = Program::init(&[2, 3, 0, 3, 99]);
         program.step(None);
         assert_eq!(program.instruction_pointer, 4);
-        assert_eq!(program.memory, [2, 3, 0, 6, 99]);
+        assert_eq!(program.memory_as_vec(), [2, 3, 0, 6, 99]);
         let mut program = Program::init(&[2, 4, 4, 5, 99, 0]);
         program.step(None);
         assert_eq!(program.instruction_pointer, 4);
-        assert_eq!(program.memory, [2, 4, 4, 5, 99, 9801]);
+        assert_eq!(program.memory_as_vec(), [2, 4, 4, 5, 99, 9801]);
     }
 
     #[test]
@@ -427,7 +423,7 @@ mod test {
     fn mini_program() {
         let mut program = Program::init(&[1, 1, 1, 4, 99, 5, 6, 0, 99]);
         program.run(Vec::new());
-        assert_eq!(program.memory, [30, 1, 1, 4, 2, 5, 6, 0, 99]);
+        assert_eq!(program.memory_as_vec(), [30, 1, 1, 4, 2, 5, 6, 0, 99]);
     }
 
     #[test]
