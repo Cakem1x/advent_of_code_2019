@@ -123,14 +123,15 @@ impl Program {
 
     /// Runs the program until after an input instruction was executed and takes exactly one input instruction.
     /// Panics when Termination or Output happens during execution.
-    pub fn run_until_input(&mut self, input: i64) {
+    pub fn run_until_input(&mut self, input: i64) -> bool {
         loop {
             match self.next_opcode() {
                 Opcode::Input => {
                     self.step(Some(input));
-                    return;
+                    return true;
                 }
-                Opcode::Output | Opcode::Terminate => panic!("Encountered Output or Terminate instruction durign run_until_input!"),
+                Opcode::Terminate => return false,
+                Opcode::Output => panic!("Encountered Output or Terminate instruction durign run_until_input!"),
                 _ => self.step(None),
             };
         }
