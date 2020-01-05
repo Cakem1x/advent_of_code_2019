@@ -1,8 +1,9 @@
 use intcode_computer;
-use std::collections::HashMap;
-use std::ops::AddAssign;
-use std::fs::read_to_string;
+use std::cmp::Ordering;
+use std::collections::BTreeMap;
 use std::convert::TryInto;
+use std::fs::read_to_string;
+use std::ops::AddAssign;
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 enum PanelColor {
@@ -23,6 +24,13 @@ impl PanelColor {
         return match self {
             PanelColor::Black => 0,
             PanelColor::White => 1,
+        };
+    }
+
+    fn to_char(&self) -> char {
+        return match self {
+            PanelColor::Black => '.',
+            PanelColor::White => '#',
         };
     }
 }
@@ -50,6 +58,21 @@ impl Direction {
 struct Coordinate {
     x: i32,
     y: i32,
+}
+
+impl Ord for Coordinate {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match self.y.cmp(&other.y) {
+            Ordering::Equal => return self.x.cmp(&other.x),
+            o => return o,
+        }
+    }
+}
+
+impl PartialOrd for Coordinate {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 impl AddAssign for Coordinate {
@@ -115,7 +138,10 @@ impl Robot {
     fn paint_color(&mut self, hull: &mut ShipHull) {
         let output = self.program.run_until_output_or_terminate();
         if output.is_some() {
-            hull.paint(&self.position, PanelColor::from_i32(output.unwrap().try_into().unwrap()));
+            hull.paint(
+                &self.position,
+                PanelColor::from_i32(output.unwrap().try_into().unwrap()),
+            );
         }
     }
 
@@ -134,14 +160,52 @@ impl Robot {
 }
 
 pub struct ShipHull {
-    panels: HashMap<Coordinate, PanelColor>,
+    panels: BTreeMap<Coordinate, PanelColor>,
 }
 
 impl ShipHull {
     fn init() -> ShipHull {
         return ShipHull {
-            panels: HashMap::new(),
+            panels: BTreeMap::new(),
         };
+    }
+
+    fn to_string(&self) -> String {
+        let mut hull_string = String::new();
+        let max_x = self
+            .panels
+            .keys()
+            .max_by(|c1, c2| c1.x.cmp(&c2.x))
+            .unwrap()
+            .x;
+        let max_y = self
+            .panels
+            .keys()
+            .max_by(|c1, c2| c1.y.cmp(&c2.y))
+            .unwrap()
+            .y;
+        let min_x = self
+            .panels
+            .keys()
+            .min_by(|c1, c2| c1.x.cmp(&c2.x))
+            .unwrap()
+            .x;
+        let min_y = self
+            .panels
+            .keys()
+            .min_by(|c1, c2| c1.y.cmp(&c2.y))
+            .unwrap()
+            .y;
+        for y in min_y..(max_y + 1) {
+            for x in min_x..(max_x + 1) {
+                let color = self.get_color(&Coordinate { x, y });
+                hull_string.push(color.to_char());
+            }
+            if y != max_y {
+                hull_string += "\n";
+            }
+        }
+        return hull_string;
     }
 
     fn get_color(&self, at: &Coordinate) -> PanelColor {
@@ -165,7 +229,17 @@ fn main() {
     let mut robot = Robot::init();
     let mut hull = ShipHull::init();
     robot.run_on_ship_hull(&mut hull);
-    println!("{} visited panels.", hull.min_number_of_visited_panels());
+    println!(
+        "robot visits {} panels, if starting on black panel.",
+        hull.min_number_of_visited_panels()
+    );
+    println!("Resulting map:\n{}", hull.to_string());
+    println!("resetting robot and hull! setting panel 0,0 to white.");
+    let mut robot = Robot::init();
+    let mut hull = ShipHull::init();
+    hull.paint(&Coordinate { x: 0, y: 0 }, PanelColor::White);
+    robot.run_on_ship_hull(&mut hull);
+    println!("Resulting map:\n{}", hull.to_string());
 }
 
 #[test]
@@ -244,4 +318,15 @@ fn ship_hull_panels_access() {
         }),
         PanelColor::Black
     );
+}
+
+#[test]
+fn ship_hull_to_string() {
+    let mut hull = ShipHull::init();
+    hull.paint(&Coordinate { x: 2, y: 1 }, PanelColor::White);
+    hull.paint(&Coordinate { x: 3, y: 1 }, PanelColor::White);
+    hull.paint(&Coordinate { x: 3, y: 2 }, PanelColor::White);
+    hull.paint(&Coordinate { x: 1, y: 3 }, PanelColor::White);
+    hull.paint(&Coordinate { x: 2, y: 3 }, PanelColor::White);
+    assert_eq!(hull.to_string(), ".##\n..#\n##.");
 }
