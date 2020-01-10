@@ -1,4 +1,4 @@
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 struct Vec3 {
     x: i32,
     y: i32,
@@ -11,7 +11,7 @@ impl Vec3 {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 struct Moon {
     pos: Vec3,
     vel: Vec3,
@@ -90,7 +90,8 @@ fn main() {
             vel: Vec3::new(),
         },
     ];
-    for _iteration_nr in 0..1000 {
+    let initial_moons = moons.clone();
+    for _iteration_nr in 0.. {
         for split_mid in 0..moons.len() {
             let (moons_left, moons_right) = moons.split_at_mut(split_mid);
             let moon_right = &mut moons_right[0];
@@ -102,9 +103,11 @@ fn main() {
         for moon in moons.iter_mut() {
             moon.update_position();
         }
+        if moons == initial_moons {
+            println!("rediscovered initial state at iteration {}", _iteration_nr);
+            break;
+        }
     }
-    let total_energy: i32 = moons.iter().map(|moon| moon.total_energy()).sum();
-    println!("total energy after 100 iterations is {}", total_energy);
 }
 
 #[test]
