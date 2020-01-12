@@ -2,7 +2,7 @@ use std::convert::TryFrom;
 use std::collections::HashMap;
 
 #[derive(Debug, PartialEq)]
-enum Opcode {
+pub enum Opcode {
     Add,
     Mul,
     Input,
@@ -150,7 +150,7 @@ impl Program {
     }
 
     /// Executes exactly one instruction, may use a provided input if an input instruction is executed. May provide some output if an output instruction is executed.
-    fn step(&mut self, input: Option<i64>) -> Option<i64> {
+    pub fn step(&mut self, input: Option<i64>) -> Option<i64> {
         let mut output = None;
         match parse_instruction(self.memory[&self.instruction_pointer]) {
             (Opcode::Add, pm1, pm2, pm3) => {
@@ -226,7 +226,7 @@ impl Program {
         return output;
     }
 
-    fn next_opcode(&self) -> Opcode {
+    pub fn next_opcode(&self) -> Opcode {
         return parse_instruction(self.memory[&self.instruction_pointer]).0;
     }
 
